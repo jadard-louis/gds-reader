@@ -1409,7 +1409,18 @@ async function saveMapping() {
     const mapFname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
     addSessionFile(mapFname, "~2KB");
     updateDefaultLayerMappingTable();  // 更新預設層對應表
-    showModal("儲存完成", `Layer Mapping 已儲存：\n${data.path}`);
+
+    // 自動下載 JSON 到本機
+    const mapEncoded = encodeURIComponent(mapFname);
+    const mapUrl = `${API}/output/${mapEncoded}`;
+    const dl = document.createElement('a');
+    dl.href = mapUrl;
+    dl.download = mapFname;
+    document.body.appendChild(dl);
+    dl.click();
+    document.body.removeChild(dl);
+    log(`⬇ 自動下載: ${mapFname}`, "ok");
+    showModal("儲存完成", `Layer Mapping 已儲存並下載：\n${mapFname}`);
   } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
   setProgress(100);
 }
