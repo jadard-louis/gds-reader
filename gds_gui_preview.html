@@ -1018,7 +1018,22 @@ async function apiPost(endpoint, body) {
     headers: {"Content-Type": "application/json"},
     body:    JSON.stringify(body),
   });
-  return res.json();
+  const data = await res.json();
+  // 雲端 server 重啟後 GDS 暫存檔消失，自動提示重新上傳
+  if (data.error && data.error.includes("GDS 路徑無效")) {
+    currentGDS = "";
+    scanned = false;
+    document.getElementById("btnSave").disabled = true;
+    document.getElementById("btnLoad").disabled = true;
+    document.getElementById("btnImage").disabled = true;
+    document.getElementById("btnElements").disabled = true;
+    document.getElementById("btnXlsx").disabled = true;
+    document.getElementById("btnBumpCheck").disabled = true;
+    showModal("伺服器已重啟", "⚠ 伺服器重新啟動後暫存的 GDS 檔案已清除。\n\n請重新拖曳上傳 GDS 檔案後再繼續操作。");
+    log("⚠ 伺服器重啟，請重新上傳 GDS 檔案", "err");
+    return data;
+  }
+  return data;
 }
 
 // ── 上傳 GDS 檔案至伺服器，回傳暫存路徑 ─────────────────────────────────────
