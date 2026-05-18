@@ -1524,17 +1524,24 @@ async function runXlsx() {
     if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("執行失敗", data.error); return; }
     log(`✓ Excel 輸出: ${data.path}`, "ok");
 
-    // 顯示可點擊的連結 + 打開資料夾按鈕
+    // 自動下載檔案到本機
     const fname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
+    const encodedName = encodeURIComponent(fname);
+    const downloadUrl = `${API}/output/${encodedName}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    log(`⬇ 自動下載: ${fname}`, "ok");
+
     const outDir = document.getElementById("outDir").value.trim();
-    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">Excel 已輸出
+    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">Excel 已輸出並自動下載
 
 檔案名稱: ${fname}
 
-檔案路徑:
-${data.path}
-
-<button data-dir="${outDir}" onclick="openOutputFolder(this.dataset.dir)" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #2d9f3b; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer;">✓ 打開資料夾</button></div>`;
+<a href="${downloadUrl}" download="${fname}" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #2d9f3b; color: white; text-decoration: none; border-radius: 4px;">⬇ 重新下載</a></div>`;
     showModal("Excel 輸出完成", htmlMsg, true);
     addSessionFile(fname, "~170KB");
   } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
