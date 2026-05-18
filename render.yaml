@@ -9,3 +9,6 @@ services:
         value: "true"
       - key: PYTHON_VERSION
         value: "3.11.0"
+    buildEnv:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
