@@ -1731,40 +1731,41 @@ ${result.output_dir}${summary}
 
 生成的文件:`;
 
+        // 自動下載所有生成的檔案
+        function autoDownload(serverPath) {
+          const fname = serverPath.includes('\\') ? serverPath.split('\\').pop() : serverPath.split('/').pop();
+          const url = `${API}/output/${encodeURIComponent(fname)}`;
+          const a = document.createElement('a');
+          a.href = url; a.download = fname;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          return { fname, url };
+        }
+
         if (result.report_html) {
-          const htmlFname = result.report_html.includes('\\') ? result.report_html.split('\\').pop() : result.report_html.split('/').pop();
-          const htmlUrl = `/output/${encodeURIComponent(htmlFname)}`;
-          reportMsg += `\n✓ <a href="${htmlUrl}" target="_blank" style="color: #0066cc; text-decoration: underline;">打開 HTML 報告: ${htmlFname}</a>`;
-          log(`✓ HTML 報告已生成: ${htmlFname}`, "ok");
-          addSessionFile(htmlFname, "35.8KB");
+          const { fname, url } = autoDownload(result.report_html);
+          reportMsg += `\n✓ <a href="${url}" target="_blank" style="color:#00d4ff;text-decoration:underline;">開啟 HTML 報告: ${fname}</a>  ⬇ 已下載`;
+          log(`⬇ 自動下載 HTML 報告: ${fname}`, "ok");
+          addSessionFile(fname, "35.8KB");
         }
 
-        if (result.report_pdf) {
-          const pdfFname = result.report_pdf.includes('\\') ? result.report_pdf.split('\\').pop() : result.report_pdf.split('/').pop();
-          const pdfUrl = `/output/${encodeURIComponent(pdfFname)}`;
-          reportMsg += `\n✓ <a href="${pdfUrl}" target="_blank" style="color: #0066cc; text-decoration: underline;">打開 PDF 報告: ${pdfFname}</a>`;
-          log(`✓ PDF 報告已生成: ${pdfFname}`, "ok");
-          addSessionFile(pdfFname, "~1MB");
-        }
-
-        if (!result.report_html && !result.report_pdf) {
-          reportMsg += `\n❌ 無法生成 HTML/PDF 報告`;
-          log(`⚠ 未找到 HTML 或 PDF 報告`, "warn");
+        if (!result.report_html) {
+          reportMsg += `\n❌ 無法生成 HTML 報告`;
+          log(`⚠ 未找到 HTML 報告`, "warn");
         }
 
         if (result.violations_csv) {
-          const csvFname = result.violations_csv.includes('\\') ? result.violations_csv.split('\\').pop() : result.violations_csv.split('/').pop();
-          reportMsg += `\n✓ TM 違規 CSV: ${csvFname}`;
-          addSessionFile(csvFname, "~3KB");
+          const { fname } = autoDownload(result.violations_csv);
+          reportMsg += `\n✓ TM 違規 CSV: ${fname}  ⬇ 已下載`;
+          log(`⬇ 自動下載 CSV: ${fname}`, "ok");
+          addSessionFile(fname, "~3KB");
         }
 
         if (result.boe_violations_csv) {
-          const boeFname = result.boe_violations_csv.includes('\\') ? result.boe_violations_csv.split('\\').pop() : result.boe_violations_csv.split('/').pop();
-          reportMsg += `\n✓ BOE 違規 CSV: ${boeFname}`;
-          addSessionFile(boeFname, "<1KB");
+          const { fname } = autoDownload(result.boe_violations_csv);
+          reportMsg += `\n✓ BOE 違規 CSV: ${fname}  ⬇ 已下載`;
+          addSessionFile(fname, "<1KB");
         }
 
-        reportMsg += `\n\n<button data-dir="${result.output_dir}" onclick="openOutputFolder(this.dataset.dir)" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #ff6600; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; font-size: 14px;">✓ 打開資料夾查看所有檔案</button>`;
         reportMsg += `</div>`;
 
         showModal("Bump Rule 檢查完成", reportMsg, true);  // 使用 HTML 模式
