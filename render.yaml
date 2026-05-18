@@ -3,7 +3,7 @@ services:
     name: gds-reader-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn gds_server:app
+    startCommand: gunicorn gds_server:app --timeout 300 --workers 1
     envVars:
       - key: RENDER
         value: "true"
