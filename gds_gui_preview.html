@@ -1313,14 +1313,14 @@ async function onJSONFileChosen(input) {
   try {
     const text = await file.text();
     const json = JSON.parse(text);
-    // 相容格式：直接是 mapping 物件 或 包含 mapping/rows/bump_type_stats
+    // server 儲存格式：{ mapping, all_layers, bump_type_stats }
     const data = {
-      rows: json.rows || [],
+      rows: json.all_layers || json.rows || [],
       bump_type_stats: json.bump_type_stats || [],
       path: file.name,
     };
-    if (data.rows.length === 0 && !data.error) {
-      showModal("提示", `無法從 JSON 讀取層資訊\n\n請確認檔案格式正確`);
+    if (data.rows.length === 0) {
+      showModal("提示", `無法從 JSON 讀取層資訊\n\n請確認檔案格式正確（需含 all_layers 欄位）`);
       setProgress(100);
       return;
     }
