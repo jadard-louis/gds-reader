@@ -5,6 +5,7 @@ GDS Reader  —  Local Flask API Server
 """
 
 import os, sys, json, tempfile, traceback
+sys.setrecursionlimit(10000)
 from pathlib import Path
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
