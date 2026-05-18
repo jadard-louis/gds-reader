@@ -304,7 +304,7 @@ def run_bump_check_python(gds_file: str, out_dir: str = None, original_name: str
             "message": f"Python Bump Check: {len(bumps)} bumps, {len(violations)} violations",
             "return_code": 0
         }
-        print(f"[INFO] 生成 HTML 報告完成: {result['report_html']}", file=_sys)
+        print(f"[INFO] 生成 HTML 報告完成: {result['report_html']}")
 
         print(f"[DEBUG] Return result: {result}")
         return result
