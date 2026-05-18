@@ -803,6 +803,7 @@
 
 <!-- Hidden file inputs -->
 <input type="file" id="filePickerGDS" accept=".gds,.gdsii,.GDS,.GDSII" style="display:none" onchange="onGDSFileChosen(this)">
+<input type="file" id="filePickerJSON" accept=".json" style="display:none" onchange="onJSONFileChosen(this)">
 
 <!-- Server offline banner -->
 <div id="offlineBanner" style="
@@ -1297,17 +1298,29 @@ function enableButtons() {
 }
 
 // ── 加載 Mapping ──────────────────────────────────────────────────────────────
-async function loadMapping() {
+function loadMapping() {
   if (!scanned) { showModal("提示","請先掃描 GDS"); return; }
-  log("加載 Mapping JSON…", "info");
+  // 雲端模式：直接開本機檔案選擇器
+  document.getElementById("filePickerJSON").value = "";
+  document.getElementById("filePickerJSON").click();
+}
+
+async function onJSONFileChosen(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  log(`加載 Mapping JSON：${file.name}…`, "info");
   setProgress(50);
   try {
-    const data = await apiPost("/api/load_mapping", {
-      file_path: currentGDS,
-    });
-    if (data.error) {
-      log(`無法加載: ${data.error}`, "warn");
-      showModal("提示", `無 Mapping JSON 檔案\n\n請先按「儲存 Mapping JSON」建立檔案`);
+    const text = await file.text();
+    const json = JSON.parse(text);
+    // 相容格式：直接是 mapping 物件 或 包含 mapping/rows/bump_type_stats
+    const data = {
+      rows: json.rows || [],
+      bump_type_stats: json.bump_type_stats || [],
+      path: file.name,
+    };
+    if (data.rows.length === 0 && !data.error) {
+      showModal("提示", `無法從 JSON 讀取層資訊\n\n請確認檔案格式正確`);
       setProgress(100);
       return;
     }
@@ -1373,7 +1386,8 @@ async function loadMapping() {
       log(`✓ Bump Type 分類數據：${data.bump_type_stats.length} 種 (數據大小: ${JSON.stringify(data.bump_type_stats).length} bytes)`, "dim");
     }
   } catch(err) {
-    log(`連線失敗: ${err.message}`, "err");
+    log(`加載失敗: ${err.message}`, "err");
+    showModal("加載失敗", `JSON 解析錯誤：${err.message}`);
   }
   setProgress(100);
 }
