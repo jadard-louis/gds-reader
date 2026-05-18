@@ -1,0 +1,7 @@
+flask==3.1.0
+flask-cors==5.0.0
+gunicorn==23.0.0
+gdstk==0.9.55
+numpy==2.2.5
+matplotlib==3.10.1
+openpyxl==3.1.5

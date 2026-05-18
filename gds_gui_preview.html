@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDS Reader — Layer Mapping Wizard v1.0</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg:      #0b0e1a;
+    --bg2:     #131728;
+    --bg3:     #1c2135;
+    --bg4:     #242840;
+    --accent:  #00d4ff;
+    --accent2: #7c5cfc;
+    --green:   #00e676;
+    --yellow:  #ffab40;
+    --red:     #ff5252;
+    --text:    #e2e8f8;
+    --text2:   #7a849e;
+    --border:  #2a3050;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 20px;
+    height: 52px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+  .logo span { color: var(--accent2); }
+  .subtitle { font-size: 10px; color: var(--text2); letter-spacing: 2px; }
+  .badge {
+    margin-left: auto;
+    font-size: 9px;
+    background: var(--bg4);
+    color: var(--green);
+    border: 1px solid var(--green);
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Main Layout ── */
+  main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Left Panel ── */
+  aside {
+    width: 260px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+
+  .section-label {
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    padding: 14px 16px 6px;
+    text-transform: uppercase;
+  }
+
+  .field-group { padding: 4px 14px; }
+  .field-group label {
+    font-size: 9px;
+    color: var(--text2);
+    display: block;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 4px;
+  }
+  .input-row input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 6px 8px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .input-row input:focus { border-color: var(--accent); }
+  .input-row input::placeholder { color: var(--text2); }
+
+  .btn-browse {
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent);
+    font-size: 11px;
+    padding: 0 10px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-browse:hover { background: var(--accent); color: var(--bg); }
+
+  .divider { height: 1px; background: var(--border); margin: 12px 14px; }
+
+  /* 主按鈕 */
+  .btn-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 3px 14px;
+    padding: 9px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: .5px;
+    text-align: left;
+  }
+  .btn-main:hover:not(:disabled) { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .btn-main:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-main.green  { color: var(--green);  }
+  .btn-main.green:hover:not(:disabled)  { background: var(--green);  border-color: var(--green);  color: var(--bg); }
+  .btn-main.blue   { color: #1976d2; }
+  .btn-main.blue:hover:not(:disabled)   { background: #1976d2; border-color: #1976d2; color: var(--bg); }
+  .btn-main.purple { color: var(--accent2); }
+  .btn-main.purple:hover:not(:disabled) { background: var(--accent2); border-color: var(--accent2); color: var(--bg); }
+  .btn-main.yellow { color: var(--yellow); }
+  .btn-main.yellow:hover:not(:disabled) { background: var(--yellow); border-color: var(--yellow); color: var(--bg); }
+  .btn-main.red    { color: var(--red);    }
+  .btn-main.red:hover:not(:disabled)    { background: var(--red);    border-color: var(--red);    color: var(--bg); }
+  .btn-main.purple { color: var(--accent2); }
+  .btn-main.purple:hover:not(:disabled) { background: var(--accent2); border-color: var(--accent2); color: var(--bg); }
+
+  /* 資訊卡 */
+  .info-card {
+    margin: 4px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    padding: 2px 0;
+  }
+  .info-key   { color: var(--text2); }
+  .info-val   { color: var(--text);  font-weight: 500; }
+  .info-val.hi { color: var(--green); }
+
+  /* ── Right Panel ── */
+  .right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── 標籤頁 ── */
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    padding: 0;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+    letter-spacing: .5px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* 表格區域 */
+  .table-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  thead tr {
+    background: var(--bg3);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  thead th {
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    padding: 10px 10px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th:first-child { text-align: left; padding-left: 16px; }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:nth-child(even) { background: rgba(255,255,255,.018); }
+  tbody tr:hover { background: rgba(0,212,255,.07); }
+
+  td {
+    padding: 9px 10px;
+    text-align: center;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+  td:first-child { text-align: left; padding-left: 16px; color: var(--text2); font-size: 9px; }
+  td.layer-num { color: var(--accent); font-weight: 700; font-size: 11px; }
+  td.num-val   { color: var(--text); }
+  td.dim-val   { color: #b0c4de; }
+
+  /* 用途 badge */
+  .badge-purpose {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    border: 1px solid;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  .p-bump             { color: #00d4ff; border-color: rgba(0,212,255,.35); background: rgba(0,212,255,.08); }
+  .p-amark            { color: #7c5cfc; border-color: rgba(124,92,252,.35); background: rgba(124,92,252,.08); }
+  .p-bump_text_name   { color: #00e676; border-color: rgba(0,230,118,.35); background: rgba(0,230,118,.08); }
+  .p-bump_text_number { color: #ffab40; border-color: rgba(255,171,64,.35); background: rgba(255,171,64,.08); }
+  .p-chip_size        { color: #ff5252; border-color: rgba(255,82,82,.35); background: rgba(255,82,82,.08); }
+  .p-unknown          { color: #556080; border-color: rgba(85,96,128,.35); background: rgba(85,96,128,.08); }
+
+  /* 下拉 */
+  select.purpose-select {
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 4px 6px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color .15s;
+    min-width: 140px;
+  }
+  select.purpose-select:focus { border-color: var(--accent); }
+
+  /* Bump Type 分類選擇 */
+  select.cat-sel {
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 4px 6px;
+    outline: none;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  select.cat-sel:focus { border-color: var(--accent); }
+  select.cat-sel.sel-INPUT {
+    border-color: rgba(0, 212, 255, .5);
+    color: #00d4ff;
+  }
+  select.cat-sel.sel-OUTPUT {
+    border-color: rgba(124, 92, 252, .5);
+    color: #7c5cfc;
+  }
+  select.cat-sel.sel-DUMMY {
+    border-color: rgba(85, 96, 128, .5);
+    color: #556080;
+  }
+
+  /* ── Log 區 ── */
+  .log-section {
+    flex-shrink: 0;
+    height: 120px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .log-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    font-size: 9px;
+    color: var(--text2);
+    letter-spacing: 1.5px;
+    flex-shrink: 0;
+  }
+  .log-header span { margin-left: auto; cursor: pointer; }
+  .log-header span:hover { color: var(--text); }
+
+  #logArea {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 14px;
+    font-size: 9px;
+    line-height: 1.7;
+    background: var(--bg);
+  }
+  .log-ok   { color: var(--green);  }
+  .log-warn { color: var(--yellow); }
+  .log-err  { color: var(--red);    }
+  .log-info { color: var(--accent); }
+  .log-dim  { color: var(--text2);  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    min-width: 360px;
+    max-width: 500px;
+    transform: translateY(12px);
+    transition: transform .2s;
+  }
+  .modal-overlay.show .modal { transform: translateY(0); }
+  .modal h3 { font-family: 'Syne',sans-serif; color: var(--accent); font-size: 14px; margin-bottom: 12px; }
+  .modal p  { font-size: 10px; color: var(--text2); line-height: 1.8; margin-bottom: 16px; }
+  .modal .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+  .modal-btn {
+    padding: 7px 18px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid;
+    transition: all .15s;
+  }
+  .modal-btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .modal-btn.secondary { background: transparent; color: var(--text2); border-color: var(--border); }
+  .modal-btn:hover { opacity: .85; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+
+  /* ── Bump Type 分類確認表 ── */
+  .btype-section {
+    margin: 6px 14px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: none;
+  }
+  .btype-header {
+    background: var(--bg3);
+    padding: 6px 10px;
+    font-size: 9px;
+    color: var(--accent2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .btype-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+  .btype-table th {
+    background: var(--bg4);
+    color: var(--text2);
+    padding: 5px 6px;
+    text-align: center;
+    font-size: 8px;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+  }
+  .btype-table td {
+    padding: 4px 6px;
+    text-align: center;
+    border-bottom: 1px solid rgba(42,48,80,.5);
+    color: var(--text);
+  }
+  .btype-table tr:last-child td { border-bottom: none; }
+  select.cat-sel {
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    padding: 2px 4px;
+    cursor: pointer;
+    outline: none;
+    width: 72px;
+  }
+  select.cat-sel.sel-INPUT  { color: #00d4ff; border-color: rgba(0,212,255,.5); }
+  select.cat-sel.sel-OUTPUT { color: #00e676; border-color: rgba(0,230,118,.5); }
+  select.cat-sel.sel-DUMMY  { color: #ffab40; border-color: rgba(255,171,64,.5); }
+
+  /* ── Help button ── */
+  .btn-help {
+    margin-left: 8px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--accent2);
+    background: transparent;
+    color: var(--accent2);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn-help:hover { background: var(--accent2); color: var(--bg); }
+
+  /* ── Help Modal ── */
+  .help-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.75);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .help-overlay.show { opacity: 1; pointer-events: all; }
+  .help-modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    width: 700px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    transform: translateY(14px);
+    transition: transform .2s;
+  }
+  .help-overlay.show .help-modal { transform: translateY(0); }
+  .help-modal h2 {
+    font-family: 'Syne', sans-serif;
+    color: var(--accent);
+    font-size: 15px;
+    margin-bottom: 18px;
+    letter-spacing: 1px;
+  }
+  .help-modal h3 {
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 18px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .help-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    margin-bottom: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+  .help-table th {
+    background: var(--bg3);
+    color: var(--accent);
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .help-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(42,48,80,.6);
+    color: var(--text);
+    vertical-align: top;
+  }
+  .help-table td:first-child { color: var(--accent); font-weight: 700; white-space: nowrap; }
+  .help-table td.desc { color: var(--text2); font-size: 9px; }
+  .help-note {
+    font-size: 9px;
+    color: var(--text2);
+    line-height: 1.8;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: var(--bg3);
+    border-radius: 5px;
+    border-left: 2px solid var(--accent2);
+  }
+  .hl-bump   { color: #00d4ff; }
+  .hl-amark  { color: #7c5cfc; }
+  .hl-chip   { color: #ff5252; }
+  .hl-text   { color: #00e676; }
+  .hl-input  { color: #00d4ff; }
+  .hl-output { color: #00e676; }
+  .hl-dummy  { color: #ffab40; }
+
+  /* 進度列 */
+  .progress-bar {
+    height: 2px;
+    background: var(--bg3);
+    overflow: hidden;
+  }
+  .progress-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0;
+    transition: width .4s ease;
+  }
+
+  /* ── Drop Zone ── */
+  .drop-zone {
+    margin: 4px 14px 0;
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 18px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: var(--bg3);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,212,255,.06);
+  }
+  .drop-zone.drag-over { border-style: solid; }
+  .drop-zone.accepted {
+    border-color: var(--green);
+    background: rgba(0,230,118,.06);
+  }
+  .drop-icon {
+    font-size: 22px;
+    color: var(--accent);
+    opacity: .7;
+    transition: opacity .2s, transform .2s;
+  }
+  .drop-zone:hover .drop-icon, .drop-zone.drag-over .drop-icon { opacity: 1; transform: scale(1.15); }
+  .drop-text {
+    font-size: 9px;
+    color: var(--text2);
+    text-align: center;
+    line-height: 1.8;
+    letter-spacing: .5px;
+  }
+  .drop-text span { color: var(--accent); font-size: 8px; }
+
+  /* empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text2);
+    gap: 12px;
+    padding: 40px;
+  }
+  .empty-icon { font-size: 48px; opacity: .3; }
+  .empty-text { font-size: 11px; letter-spacing: 1px; text-align: center; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">GDS<span>◈</span>READER</div>
+  <div class="subtitle">LAYER MAPPING WIZARD</div>
+  <div class="badge">v1.0</div>
+  <button class="btn-help" onclick="showHelp()" title="使用說明">?</button>
+</header>
+
+<div class="progress-bar"><div class="progress-inner" id="progress"></div></div>
+
+<main>
+  <!-- Left Panel -->
+  <aside>
+    <div class="section-label">▸ 檔案設定</div>
+
+    <!-- Drag-and-drop zone -->
+    <div class="drop-zone" id="dropZone" onclick="browseFile()">
+      <div class="drop-icon">⬡</div>
+      <div class="drop-text">拖曳 .gds 檔案至此<br><span>或點擊選擇檔案</span></div>
+    </div>
+
+    <div class="field-group" style="margin-top:6px">
+      <label>GDS 檔案路徑</label>
+      <div class="input-row">
+        <input type="text" id="gdsPath" placeholder="/path/to/design.gds" value="">
+        <button class="btn-browse" onclick="browseFile()">…</button>
+      </div>
+    </div>
+
+    <div class="field-group" style="margin-top:8px">
+      <label>輸出目錄</label>
+      <div class="input-row">
+        <input type="text" id="outDir" placeholder="/path/to/output" value="">
+        <button class="btn-browse" onclick="browseDir()">…</button>
+      </div>
+    </div>
+
+    <div class="field-group" style="margin-top:8px">
+      <label>簡圖區域寬度（µm）</label>
+      <div class="input-row">
+        <input type="number" id="windowUm" placeholder="3500" value="3500" min="1000" max="10000" step="500">
+        <span style="font-size:9px;color:var(--text2);margin-left:8px">預設 3500，A2 Center 固定</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn-main" onclick="scanGDS()">
+      <span>⬡</span> 掃描 GDS
+    </button>
+
+    <div class="section-label" style="margin-top:8px">▸ GDS 資訊</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-key">檔案</span><span class="info-val" id="infoFile">—</span></div>
+      <div class="info-row"><span class="info-key">Bump Type</span><span class="info-val" id="infoBumpType">—</span></div>
+      <div class="info-row"><span class="info-key">Layers</span><span class="info-val" id="infoLayers">—</span></div>
+      <div class="info-row"><span class="info-key">Unit</span><span class="info-val" id="infoUnit">—</span></div>
+      <div class="info-row"><span class="info-key">Top Cell</span><span class="info-val hi" id="infoTop">—</span></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-label">▸ 執行操作</div>
+
+    <button class="btn-main green"  id="btnSave"   disabled onclick="saveMapping()">
+      <span>💾</span> 儲存 Mapping JSON
+    </button>
+    <button class="btn-main blue"   id="btnLoad"   disabled onclick="loadMapping()">
+      <span>📂</span> 加載 Mapping JSON
+    </button>
+    <button class="btn-main yellow" id="btnImage"  disabled onclick="runImage()">
+      <span>🖼</span>  GDS 轉圖片
+    </button>
+    <button class="btn-main red"    id="btnElem"   disabled onclick="runElements()">
+      <span>🔍</span> Bump / Amark 分析
+    </button>
+    <button class="btn-main green"  id="btnXlsx"   disabled onclick="runXlsx()">
+      <span>📊</span> 輸出 PAD Excel
+    </button>
+    <button class="btn-main purple" id="btnBump"   disabled onclick="runBumpCheck()">
+      <span>✓</span> Bump Rule 檢查
+    </button>
+
+    <div class="divider"></div>
+    <div class="section-label">▸ 診斷工具</div>
+
+    <button class="btn-main" style="background: #666; color: white;" onclick="showOutputFiles()">
+      <span>📋</span> 檢查輸出檔案
+    </button>
+
+  </aside>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <!-- 標籤頁切換 -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="layerTab" onclick="switchTab('layerTab')">
+        <span>◈</span> Layer 對應
+      </button>
+      <button class="tab-btn" data-tab="bumptypeTab" onclick="switchTab('bumptypeTab')">
+        <span>▢</span> Bump Type 分類
+      </button>
+    </div>
+
+    <!-- Layer 表 -->
+    <div class="table-area" id="tableArea">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">◈</div>
+        <div class="empty-text">選擇 GDS 檔案後<br>點擊「掃描 GDS」開始分析</div>
+      </div>
+      <table id="mainTable" style="display:none">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>LAYER</th>
+            <th>DTYPE</th>
+            <th>#POLY</th>
+            <th>#TEXT</th>
+            <th>W (µm)</th>
+            <th>H (µm)</th>
+            <th>AREA (µm²)</th>
+            <th>推測用途</th>
+            <th>修改</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Bump Type 表 -->
+    <div class="table-area" id="bumptypeArea" style="display:none">
+      <div class="empty-state" id="bumptypeEmpty">
+        <div class="empty-icon">▢</div>
+        <div class="empty-text">執行「Bump / Amark 分析」後<br>會顯示 Bump Type 分類清單</div>
+      </div>
+      <table id="bumptypeTable" style="display:none">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>W(µm)</th>
+            <th>H(µm)</th>
+            <th>Amt</th>
+            <th>分類</th>
+          </tr>
+        </thead>
+        <tbody id="btypeTbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Log -->
+    <div class="log-section">
+      <div class="log-header">
+        ▸ 執行記錄
+        <span onclick="clearLog()">[ 清除 ]</span>
+      </div>
+      <div id="logArea"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Hidden file inputs -->
+<input type="file" id="filePickerGDS" accept=".gds,.gdsii,.GDS,.GDSII" style="display:none" onchange="onGDSFileChosen(this)">
+
+<!-- Server offline banner -->
+<div id="offlineBanner" style="
+  display:none; position:fixed; top:52px; left:0; right:0; z-index:50;
+  background:#1a0a00; border-bottom:1px solid #ff5252;
+  padding:8px 20px; font-size:10px; color:#ff5252;
+  font-family:'JetBrains Mono',monospace; letter-spacing:.5px;">
+  ⚠ 伺服器未啟動 — 請先執行：
+  <code style="background:#2a1000;padding:2px 8px;border-radius:3px;margin:0 6px;color:#ffab40;">
+    python gds_server.py
+  </code>
+  或雙擊
+  <code style="background:#2a1000;padding:2px 8px;border-radius:3px;margin:0 6px;color:#ffab40;">
+    start_gui.bat
+  </code>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">操作完成</h3>
+    <p id="modalMsg" style="white-space:pre-wrap"></p>
+    <div class="modal-btns">
+      <button class="modal-btn secondary" onclick="closeModal()">關閉</button>
+      <button class="modal-btn primary"   onclick="closeModal()">確認</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div class="help-overlay" id="helpOverlay" onclick="closeHelp(event)">
+  <div class="help-modal">
+    <h2>◈ 使用說明</h2>
+
+    <h3>▸ 掃描工作流程</h3>
+    <table class="help-table">
+      <tr><th>步驟</th><th>操作</th><th>說明</th></tr>
+      <tr><td><strong>1</strong></td><td>掃描 GDS</td><td>上傳 GDS 檔案，自動使用推測規則分析層配置。<br>掃描完成後<strong>不自動執行分析</strong>，由用戶自行選擇操作。</td></tr>
+      <tr><td><strong>2</strong></td><td>修改與儲存<br><span style="color:var(--text2);font-size:9px">(可選)</span></td><td>掃描後可在表格「修改」欄位手動調整層的用途。<br>按「儲存 Mapping JSON」確認，檔案存於 <code>output/</code> 目錄。</td></tr>
+      <tr><td><strong>3</strong></td><td>加載 Mapping JSON<br><span style="color:var(--text2);font-size:9px">(可選)</span></td><td>若需套用之前保存的層映射，點擊「加載 Mapping JSON」按鈕。<br>系統自動查找 <code>output/</code> 和 <code>input/</code> 目錄中的 JSON 檔。</td></tr>
+      <tr><td><strong>4</strong></td><td>執行分析</td><td>點擊「Bump / Amark 分析」加載 Bump Type 分類。<br>點擊「輸出 PAD Excel」生成最終 Excel 報表。</td></tr>
+    </table>
+    <div class="help-note">工作流程 2、3 可選，直接執行步驟 4 即可；若需修改層對應規則才進行步驟 2、3。</div>
+
+    <h3>▸ Layer 對應規則</h3>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">精確強制對應（Layer : DType，優先級最高）</h4>
+    <table class="help-table">
+      <tr><th>Layer</th><th>DType</th><th>強制用途</th><th>說明</th></tr>
+      <tr><td class="hl-chip">190</td><td>9</td><td><span class="hl-chip">chip_size</span></td><td class="desc">預設晶片邊界層（優先級最高）</td></tr>
+    </table>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">預設 Layer 對應（DType 固定）</h4>
+    <table class="help-table" id="defaultLayerMappingTable">
+      <tr><th>用途</th><th>Layer</th><th>DType</th><th>說明</th></tr>
+      <tr><td><span class="hl-chip">chip_size</span></td><td class="hl-chip">190</td><td>9</td><td>晶片邊界矩形（優先級最高）</td></tr>
+      <tr><td><span class="hl-amark">amark</span></td><td class="hl-amark">205</td><td>224</td><td>Alignment Mark 外框矩形</td></tr>
+      <tr><td><span class="hl-bump">bump</span></td><td class="hl-bump">224, 225</td><td>0</td><td>Bump / PAD 幾何圖形（含 #POLY 一律強制識別）</td></tr>
+      <tr><td><span class="hl-text">bump_text_number</span></td><td class="hl-text">224, 225</td><td>0</td><td>Bump 序號標注（含 #TEXT 一律強制識別）</td></tr>
+      <tr><td><span class="hl-text">bump_text_name</span></td><td class="hl-text">211</td><td>224</td><td>Bump 信號名稱（如 VDD、RX[0]）</td></tr>
+    </table>
+    <div class="help-note">預設對應優先級最高。若需要自訂，掃描後在表格「修改」欄位手動調整，再按「儲存 Mapping JSON」。<br>
+    <strong>特例：</strong>Layer 224, 225 DType 0 的強制識別<strong>不受 mapping JSON 影響</strong>：
+    <ul>
+      <li>含 #POLY（polygon）一律為 <strong>BUMP/PAD</strong></li>
+      <li>含 #TEXT 一律為 <strong>Bump 序號標注</strong></li>
+    </ul></div>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">幾何自動推測規則（polygon，依優先順序）</h4>
+    <table class="help-table">
+      <tr><th>條件</th><th>推測用途</th></tr>
+      <tr><td>polygon 數 ≤ 4，平均面積 &gt; 100,000 µm²</td><td><span class="hl-chip">chip_size</span></td></tr>
+      <tr><td>polygon 數 ≤ 8，最大頂點數 ≥ 8（十字形），寬/高 ≤ 150 µm</td><td><span class="hl-amark">amark</span></td></tr>
+      <tr><td>polygon 數 ≤ 20，最小頂點數 = 3（三角形），寬/高 ≤ 150 µm</td><td><span class="hl-amark">amark</span></td></tr>
+      <tr><td>polygon 數 &gt; 4，平均面積 &lt; 5,000 µm²，長寬比 0.5–2.0</td><td><span class="hl-bump">bump</span></td></tr>
+      <tr><td>其他</td><td>unknown</td></tr>
+    </table>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">文字內容自動推測規則（text）</h4>
+    <table class="help-table">
+      <tr><th>文字特徵</th><th>推測用途</th></tr>
+      <tr><td>amark layer（如 205）的附屬文字</td><td><span class="hl-amark">amark_text</span>（自動歸類）</td></tr>
+      <tr><td>同 layer polygon 平均面積 &gt; 10,000 µm²（大型外框附屬）</td><td>unknown（忽略）</td></tr>
+      <tr><td>含「NO」（大小寫不拘，如 NO3501）</td><td><span class="hl-text">bump_text_number</span></td></tr>
+      <tr><td>含英文字母（如 RX[9]、VDDD）</td><td><span class="hl-text">bump_text_name</span></td></tr>
+      <tr><td>純數字</td><td><span class="hl-text">bump_text_number</span></td></tr>
+    </table>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">PAD 分類規則（Excel 輸出）</h4>
+    <table class="help-table">
+      <tr><th>條件</th><th>分類</th><th>說明</th></tr>
+      <tr><td>密集單排（同 Y 行 &gt; 10 個，±0.5 µm 容差）+ 晶片下半部<br><span style="color:var(--text2);font-size:9px">→ 固定 1 排，靠近 IC 下半部 edge</span></td><td><span class="hl-input">INPUT</span></td><td class="desc">密集排列，僅 1 排</td></tr>
+      <tr><td>密集單排（同 Y 行 &gt; 10 個，±0.5 µm 容差）+ INPUT 上緣以上<br><span style="color:var(--text2);font-size:9px">→ 可為 1 排以上，靠近 IC 上半部 edge</span></td><td><span class="hl-output">OUTPUT</span></td><td class="desc">密集排列，1 排以上</td></tr>
+      <tr><td>其他（邊緣稀疏 / 角落稀疏 / IC 中間稀疏）</td><td><span class="hl-dummy">DUMMY</span></td><td class="desc">雜散 PAD，不符合 INPUT/OUTPUT 分類</td></tr>
+    </table>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">Excel 輸出欄位說明</h4>
+    <table class="help-table">
+      <tr><th>符號</th><th>說明</th><th>計算方式</th></tr>
+      <tr><td><span class="hl-input">A1-A3</span></td><td>INPUT PAD 尺寸</td><td>按 W×H 統計，按數量排序</td></tr>
+      <tr><td><span class="hl-input">A4</span></td><td>INPUT to IC 下方邊</td><td>min(INPUT PAD 底部到 chip 下邊距離)</td></tr>
+      <tr><td><span class="hl-input">A5</span></td><td>INPUT to IC 側邊</td><td>min(INPUT PAD 左/右邊到 chip 側邊距離)</td></tr>
+      <tr><td><span class="hl-output">B1-B2</span></td><td>OUTPUT PAD 尺寸</td><td>按 W×H 統計，按數量排序</td></tr>
+      <tr><td><span class="hl-output">B3</span></td><td>OUTPUT to IC 上方邊</td><td>min(OUTPUT PAD 頂部到 chip 上邊距離)</td></tr>
+      <tr><td><span class="hl-output">B4</span></td><td>OUTPUT to IC 側邊</td><td>min(OUTPUT PAD 左/右邊到 chip 側邊距離)</td></tr>
+      <tr><td><span class="hl-output">B5</span></td><td>OUTPUT to INPUT 間距</td><td>OUTPUT 最下點 - INPUT 最上點（只用靠近 chip 中心的 OUTPUT）</td></tr>
+      <tr><td><span class="hl-dummy">C1-C2</span></td><td>DUMMY PAD 尺寸</td><td>按 W×H 統計，按數量排序</td></tr>
+      <tr><td><span class="hl-dummy">C3</span></td><td>DUMMY to IC 上方邊</td><td>min(DUMMY PAD 頂部到 chip 上邊距離)</td></tr>
+      <tr><td><span class="hl-dummy">C4</span></td><td>DUMMY to IC 側邊</td><td>min(DUMMY PAD 左/右邊到 chip 側邊距離)</td></tr>
+    </table>
+    <div class="help-note">所有距離計算一律使用 <strong>real（實際最小值）</strong>，嚴禁使用 avg（平均值）。</div>
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">Layer 用途說明</h4>
+    <table class="help-table">
+      <tr><th>用途</th><th>說明</th></tr>
+      <tr><td><span class="hl-bump">bump</span></td><td class="desc">Bump / PAD 幾何圖形，用於計算座標、尺寸、PAD 清單</td></tr>
+      <tr><td><span class="hl-amark">amark</span></td><td class="desc">Alignment Mark 外框矩形，定位晶片角落標記</td></tr>
+      <tr><td><span class="hl-amark">amark_text</span></td><td class="desc">Alignment Mark 附屬文字，不列入 PAD 清單</td></tr>
+      <tr><td><span class="hl-text">bump_text_name</span></td><td class="desc">Bump 信號名稱標注（如 VDD、RX[0]）</td></tr>
+      <tr><td><span class="hl-text">bump_text_number</span></td><td class="desc">Bump 序號標注（如 NO0001）</td></tr>
+      <tr><td><span class="hl-chip">chip_size</span></td><td class="desc">晶片邊界矩形，用於計算 Chip W × H</td></tr>
+      <tr><td>origin_mark</td><td class="desc">晶片 (0, 0) 原點標記，不參與分析</td></tr>
+      <tr><td>unknown</td><td class="desc">未識別用途，可在表格中手動修改</td></tr>
+    </table>
+
+    <div class="help-note">
+      掃描後可在表格「修改」欄位手動調整各 layer 的用途，再按「儲存 Mapping JSON」儲存確認結果。<br>
+      後續「Bump / Amark 分析」與「輸出 PAD Excel」均以已儲存的 JSON 為準。
+    </div>
+
+
+    <h4 style="font-size:9px;color:var(--accent2);margin-top:14px;margin-bottom:8px;letter-spacing:2px;padding-bottom:4px;border-bottom:1px solid var(--border);">簡圖區域寬度設置</h4>
+    <table class="help-table">
+      <tr><th>項目</th><th>說明</th></tr>
+      <tr><td><strong>預設寬度</strong></td><td>3500µm（區域 #1, #2, #4, #5）</td></tr>
+      <tr><td><strong>A2 Center</strong></td><td>固定 ±1750µm（#3，不受寬度設置影響）</td></tr>
+      <tr><td><strong>自訂方法</strong></td><td>在生成 Excel 時提供 <code>window_um</code> 參數（API 後端支持）</td></tr>
+    </table>
+    <div class="help-note">
+      增加 window_um：各區域更寬，顯示更多 PAD 上下文<br>
+      減少 window_um：各區域更窄，更聚焦展示轉變點
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:20px">
+      <button class="modal-btn primary" onclick="closeHelp()">關閉</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:5000";  // Flask server
+
+const PURPOSE_LABELS = {
+  bump:             "Bump / PAD",
+  amark:            "Alignment Mark",
+  bump_text_name:   "Bump Text (名稱)",
+  bump_text_number: "Bump Text (編號)",
+  chip_size:        "Chip Size",
+  unknown:          "Unknown",
+};
+const PURPOSES = Object.keys(PURPOSE_LABELS);
+const DOT_COLORS = {
+  bump:"#00d4ff", amark:"#7c5cfc", bump_text_name:"#00e676",
+  bump_text_number:"#ffab40", chip_size:"#ff5252", unknown:"#556080"
+};
+
+let currentRows  = [];
+let currentGDS   = "";   // 伺服器端的實際路徑（上傳後為暫存路徑）
+let scanned      = false;
+let loadedBumpTypeStats = [];  // 從 Mapping JSON 加載的 Bump Type 分類（等待應用）
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function log(msg, type="dim") {
+  const area = document.getElementById("logArea");
+  const now  = new Date().toLocaleTimeString("zh-TW",{hour12:false});
+  const line = document.createElement("div");
+  line.className = `log-${type}`;
+  line.textContent = `[${now}]  ${msg}`;
+  area.appendChild(line);
+  area.scrollTop = area.scrollHeight;
+}
+function clearLog() { document.getElementById("logArea").innerHTML = ""; }
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+function setProgress(pct) {
+  document.getElementById("progress").style.width = pct + "%";
+  if (pct >= 100) setTimeout(() => setProgress(0), 800);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function showModal(title, msg, useHTML = false) {
+  document.getElementById("modalTitle").textContent = title;
+  const msgEl = document.getElementById("modalMsg");
+  if (useHTML) {
+    msgEl.innerHTML = msg;
+  } else {
+    msgEl.textContent = msg;
+  }
+  document.getElementById("modal").classList.add("show");
+}
+function closeModal() { document.getElementById("modal").classList.remove("show"); }
+
+function showHelp() { document.getElementById("helpOverlay").classList.add("show"); }
+function closeHelp(e) {
+  if (!e || e.target === document.getElementById("helpOverlay"))
+    document.getElementById("helpOverlay").classList.remove("show");
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function apiPost(endpoint, body) {
+  const res = await fetch(API + endpoint, {
+    method:  "POST",
+    headers: {"Content-Type": "application/json"},
+    body:    JSON.stringify(body),
+  });
+  return res.json();
+}
+
+// ── 上傳 GDS 檔案至伺服器，回傳暫存路徑 ─────────────────────────────────────
+async function uploadGDS(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res  = await fetch(API + "/api/upload_gds", {method:"POST", body: fd});
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.tmp_path;   // 伺服器暫存路徑
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+(function initDrop() {
+  const zone = document.getElementById("dropZone");
+
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
+  zone.addEventListener("dragleave", e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("drag-over"); });
+
+  zone.addEventListener("drop", async e => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (!["gds","gdsii"].includes(ext)) {
+      log(`格式錯誤: ${file.name}`, "err");
+      showModal("格式錯誤", `請拖曳 .gds 或 .gdsii 檔案\n（目前：${file.name}）`);
+      return;
+    }
+    try {
+      setProgress(30);
+      log(`上傳中: ${file.name} (${(file.size/1024).toFixed(0)} KB)…`, "info");
+      const tmpPath = await uploadGDS(file);
+      currentGDS = tmpPath;
+      document.getElementById("gdsPath").value = file.name;
+      zone.classList.add("accepted");
+      zone.querySelector(".drop-icon").textContent = "✓";
+      zone.querySelector(".drop-text").innerHTML =
+        `<strong style="color:var(--green)">${file.name}</strong><br><span>點擊重新選擇</span>`;
+      setProgress(60);
+      log(`上傳完成，開始掃描…`, "ok");
+      await doScan(tmpPath);
+    } catch(err) {
+      setProgress(0);
+      log(`上傳失敗: ${err.message}`, "err");
+      showModal("上傳失敗", err.message);
+    }
+  });
+
+  document.addEventListener("dragover", e => e.preventDefault());
+  document.addEventListener("drop",     e => e.preventDefault());
+})();
+
+// ── Browse ────────────────────────────────────────────────────────────────────
+function browseFile() {
+  document.getElementById("filePickerGDS").click();
+}
+async function browseDir() {
+  if (window.showDirectoryPicker) {
+    try {
+      const h = await window.showDirectoryPicker();
+      document.getElementById("outDir").value = h.name;
+      log(`輸出目錄: ${h.name}`, "info");
+    } catch(e) { if (e.name !== "AbortError") log(`目錄選擇失敗: ${e.message}`, "err"); }
+  } else {
+    const dir = prompt("請輸入輸出目錄路徑：", document.getElementById("outDir").value);
+    if (dir) { document.getElementById("outDir").value = dir; log(`輸出目錄: ${dir}`, "info"); }
+  }
+}
+
+async function onGDSFileChosen(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  try {
+    setProgress(30);
+    log(`上傳中: ${file.name}…`, "info");
+    const tmpPath = await uploadGDS(file);
+    currentGDS = tmpPath;
+    document.getElementById("gdsPath").value = file.name;
+    setProgress(60);
+    log(`上傳完成，開始掃描…`, "ok");
+    await doScan(tmpPath);
+  } catch(err) {
+    setProgress(0);
+    log(`上傳失敗: ${err.message}`, "err");
+  }
+}
+
+// ── 掃描 GDS ──────────────────────────────────────────────────────────────────
+async function scanGDS() {
+  // 若已上傳（拖曳/Browse），currentGDS 已有暫存路徑
+  // 若使用者手動輸入完整路徑，直接傳給後端
+  let path = currentGDS || document.getElementById("gdsPath").value.trim();
+  if (!path) { showModal("提示","請先拖曳或選擇 GDS 檔案"); return; }
+  await doScan(path);
+}
+
+async function doScan(path) {
+  setProgress(40);
+  document.getElementById("btnScan") && (document.getElementById("btnScan").disabled = true);
+
+  try {
+    const data = await apiPost("/api/scan", {file_path: path});
+    if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("掃描失敗", data.error); setProgress(0); return; }
+
+    currentGDS  = path;
+    currentRows = data.rows;
+    scanned     = true;
+
+    // 更新資訊卡
+    const displayFile = data.info.file;
+    document.getElementById("infoFile").textContent   = displayFile;
+    log(`掃描: ${displayFile}`, "info");  // 顯示實際檔案名（非臨時路徑）
+    document.getElementById("infoBumpType").textContent = data.info.bump_type;
+    document.getElementById("infoLayers").textContent = data.info.layers;
+    document.getElementById("infoUnit").textContent   = data.info.unit;
+    document.getElementById("infoTop").textContent    = data.info.top;
+
+    renderTable();
+    enableButtons();
+    updateDefaultLayerMappingTable();  // 更新預設層對應表
+    setProgress(100);
+
+    // 不自動執行 Bump / Amark 分析，由用戶自行操作
+    if (data.mapping_loaded) {
+      log(`✓ Mapping JSON 已自動載入：${data.mapping_path}`, "ok");
+      log(`掃描完成 — 找到 ${currentRows.length} 個 layer（用途已從 JSON 還原）`, "ok");
+    } else {
+      log(`掃描完成 — 找到 ${currentRows.length} 個 layer（幾何自動推測）`, "ok");
+    }
+    log("如需加載 Bump Type 分類，請按「Bump / Amark 分析」按鈕", "dim");
+  } catch(err) {
+    setProgress(0);
+    log(`無法連線到伺服器: ${err.message}`, "err");
+    showModal("連線失敗", `請確認 gds_server.py 已啟動\n\npython gds_server.py\n\n${err.message}`);
+  }
+}
+
+// ── 渲染表格 ──────────────────────────────────────────────────────────────────
+function renderTable() {
+  // 初始化標籤頁：顯示 Layer 標籤頁
+  switchTab("layerTab");
+
+  document.getElementById("emptyState").style.display = "none";
+  const tbl  = document.getElementById("mainTable");
+  tbl.style.display = "table";
+  const body = document.getElementById("tableBody");
+  body.innerHTML = "";
+
+  currentRows.forEach((r, i) => {
+    const tr       = document.createElement("tr");
+    const pClass   = `p-${r.purpose}`;
+    const dotColor = DOT_COLORS[r.purpose] || "#556080";
+
+    tr.innerHTML = `
+      <td>${i}</td>
+      <td class="layer-num">${r.layer}</td>
+      <td class="num-val">${r.dt}</td>
+      <td class="num-val">${(r.nPoly||0).toLocaleString()}</td>
+      <td class="num-val">${(r.nText||0).toLocaleString()}</td>
+      <td class="dim-val">${(r.w||0).toFixed(3)}</td>
+      <td class="dim-val">${(r.h||0).toFixed(3)}</td>
+      <td class="dim-val">${(r.area||0) >= 1e6 ? (r.area).toExponential(2) : (r.area||0).toFixed(2)}</td>
+      <td>
+        <span class="badge-purpose ${pClass}">
+          <span class="dot" style="background:${dotColor}"></span>
+          ${PURPOSE_LABELS[r.purpose] || r.purpose}
+        </span>
+      </td>
+      <td>
+        <select class="purpose-select" onchange="changePurpose(${i}, this.value)">
+          ${PURPOSES.map(p=>`<option value="${p}"${p===r.purpose?" selected":""}>${PURPOSE_LABELS[p]}</option>`).join("")}
+        </select>
+      </td>`;
+    body.appendChild(tr);
+  });
+}
+
+function changePurpose(idx, val) {
+  currentRows[idx].purpose = val;
+  log(`Layer ${currentRows[idx].layer}  →  ${PURPOSE_LABELS[val]}`, "warn");
+  renderTable();
+  updateDefaultLayerMappingTable();
+}
+
+// ── 動態更新預設 Layer 對應表 ──────────────────────────────────────────────────
+function updateDefaultLayerMappingTable() {
+  if (!currentRows || currentRows.length === 0) return;
+
+  // 預設層定義映射模板（以層號和DType為基準）
+  const defaultSpecs = [
+    { layer: 190, dt: 9, expectedPurpose: "chip_size", desc: "晶片邊界矩形（優先級最高）" },
+    { layer: 205, dt: 224, expectedPurpose: "amark", desc: "Alignment Mark 外框矩形" },
+    { layers: [224, 225], dt: 0, expectedPurpose: "bump", desc: "Bump / PAD 幾何圖形（含 #POLY 一律強制識別）" },
+    { layers: [224, 225], dt: 0, expectedPurpose: "bump_text_number", desc: "Bump 序號標注（含 #TEXT 一律強制識別）" },
+    { layer: 211, dt: 224, expectedPurpose: "bump_text_name", desc: "Bump 信號名稱（如 VDD、RX[0]）" },
+  ];
+
+  const table = document.getElementById("defaultLayerMappingTable");
+  if (!table) return;
+
+  // 保留 header，清空其他行
+  while (table.rows.length > 1) table.deleteRow(1);
+
+  // 追蹤已顯示的層，避免重複
+  const displayedLayerKeys = new Set();
+
+  // 1. 先按預設順序顯示標準 5 層
+  defaultSpecs.forEach(spec => {
+    const targetLayers = spec.layers || [spec.layer];
+    const matchingRow = currentRows.find(row =>
+      targetLayers.includes(row.layer) && row.dt === spec.dt
+    );
+
+    if (matchingRow) {
+      // 標記為已顯示
+      displayedLayerKeys.add(`${matchingRow.layer}:${matchingRow.dt}`);
+
+      const tr = document.createElement("tr");
+      const actualPurpose = matchingRow.purpose || spec.expectedPurpose;
+      const purposeLabel = PURPOSE_LABELS[actualPurpose] || actualPurpose;
+      const hlClass = `hl-${actualPurpose.split("_")[0]}`;
+      const layerStr = spec.layers ? spec.layers.join(", ") : String(spec.layer);
+
+      tr.innerHTML = `
+        <td><span class="${hlClass}">${purposeLabel}</span></td>
+        <td class="${hlClass}">${layerStr}</td>
+        <td>${spec.dt}</td>
+        <td>${spec.desc}</td>
+      `;
+      table.appendChild(tr);
+    }
+  });
+
+  // 2. 再顯示其他額外掃描到的層（不在預設 5 層中）
+  currentRows.forEach(row => {
+    const key = `${row.layer}:${row.dt}`;
+    if (!displayedLayerKeys.has(key)) {
+      const tr = document.createElement("tr");
+      const purposeLabel = PURPOSE_LABELS[row.purpose] || row.purpose;
+      const hlClass = `hl-${row.purpose.split("_")[0]}`;
+
+      tr.innerHTML = `
+        <td><span class="${hlClass}">${purposeLabel}</span></td>
+        <td class="${hlClass}">${row.layer}</td>
+        <td>${row.dt}</td>
+        <td>其他掃描層（mapping JSON 可自訂）</td>
+      `;
+      table.appendChild(tr);
+    }
+  });
+}
+
+function enableButtons() {
+  ["btnSave","btnLoad","btnImage","btnElem","btnXlsx","btnBump"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+  updateDefaultLayerMappingTable();
+}
+
+// ── 加載 Mapping ──────────────────────────────────────────────────────────────
+async function loadMapping() {
+  if (!scanned) { showModal("提示","請先掃描 GDS"); return; }
+  log("加載 Mapping JSON…", "info");
+  setProgress(50);
+  try {
+    const data = await apiPost("/api/load_mapping", {
+      file_path: currentGDS,
+    });
+    if (data.error) {
+      log(`無法加載: ${data.error}`, "warn");
+      showModal("提示", `無 Mapping JSON 檔案\n\n請先按「儲存 Mapping JSON」建立檔案`);
+      setProgress(100);
+      return;
+    }
+    // 更新 currentRows 的 purpose
+    if (data.rows) {
+      data.rows.forEach((newRow, idx) => {
+        if (currentRows[idx]) {
+          currentRows[idx].purpose = newRow.purpose;
+        }
+      });
+    }
+    renderTable();
+    updateDefaultLayerMappingTable();
+
+    // 處理 Bump Type 分類（優先直接恢復表格）
+    if (data.bump_type_stats && data.bump_type_stats.length > 0) {
+      loadedBumpTypeStats = data.bump_type_stats;
+      console.log("loadMapping: bump_type_stats =", loadedBumpTypeStats);
+      console.log("loadMapping: bump_type_stats[0] =", data.bump_type_stats[0]);
+
+      // 檢查是否有最少的必需數據（w, h, cat）
+      const hasMinimalData = data.bump_type_stats.every(bts =>
+        bts.w !== undefined && bts.h !== undefined && bts.cat !== undefined
+      );
+      console.log("loadMapping: hasMinimalData =", hasMinimalData);
+
+      // 檢查是否有 count 數據
+      const hasCountData = data.bump_type_stats.every(bts =>
+        bts.count !== undefined && !isNaN(bts.count)
+      );
+      console.log("loadMapping: hasCountData =", hasCountData);
+
+      const rows = document.querySelectorAll("#btypeTbody tr");
+      console.log("loadMapping: #btypeTbody rows.length =", rows.length);
+
+      if (hasMinimalData && rows.length === 0) {
+        // 有數據且表格未初始化 → 直接從 Mapping JSON 恢復表格
+        log(`✓ 從 Mapping JSON 直接恢復 Bump Type 分類表（${data.bump_type_stats.length} 種）…`, "ok");
+        console.log("loadMapping: Populating table from saved data");
+        loadedBumpTypeStats = [];  // 清空，防止 populateBumpTypeTable 重複應用
+        populateBumpTypeTable(data.bump_type_stats);
+      } else if (rows.length > 0) {
+        // 表格已初始化 → 直接應用分類
+        log(`✓ Bump Type 表格已存在，同步已儲存的分類…`, "ok");
+        console.log("loadMapping: Applying stats to existing table");
+        applyBumpTypeStats(loadedBumpTypeStats);
+      } else {
+        // 都不符合 → 保存到記憶體供稍後使用
+        log(`ℹ Bump Type 分類已加載（${data.bump_type_stats.length} 種）：執行「Bump / Amark 分析」時會自動應用`, "dim");
+        console.log("loadMapping: Saved to global for later use");
+      }
+    } else {
+      loadedBumpTypeStats = [];
+      console.log("loadMapping: No bump_type_stats in JSON", "data.bump_type_stats =", data.bump_type_stats);
+      if (!data.bump_type_stats || data.bump_type_stats.length === 0) {
+        log(`ℹ Mapping JSON 中無 Bump Type 分類數據`, "dim");
+      }
+    }
+
+    log(`✓ 已加載: ${data.path}`, "ok");
+    log(`${data.rows.length} 個層的用途已從 JSON 還原`, "ok");
+    if (data.bump_type_stats && data.bump_type_stats.length > 0) {
+      log(`✓ Bump Type 分類數據：${data.bump_type_stats.length} 種 (數據大小: ${JSON.stringify(data.bump_type_stats).length} bytes)`, "dim");
+    }
+  } catch(err) {
+    log(`連線失敗: ${err.message}`, "err");
+  }
+  setProgress(100);
+}
+
+// ── 儲存 Mapping ──────────────────────────────────────────────────────────────
+async function saveMapping() {
+  if (!scanned) { showModal("提示","請先掃描 GDS"); return; }
+  log("儲存 Layer Mapping JSON…", "info");
+  setProgress(50);
+  try {
+    // 收集完整的 Bump Type 分類（w, h, count, cat）
+    const bumpTypeStats = [];
+    const allRows = document.querySelectorAll("#btypeTbody tr");
+    console.log("saveMapping: found", allRows.length, "rows in #btypeTbody");
+
+    allRows.forEach((tr, idx) => {
+      const sel = tr.querySelector("select.cat-sel");
+      if (sel && sel.dataset.w && sel.dataset.h) {
+        const w = parseFloat(sel.dataset.w);
+        const h = parseFloat(sel.dataset.h);
+        // 從表格行讀取 count（第4列 <td>，索引 3）
+        const cells = tr.querySelectorAll("td");
+        console.log(`saveMapping row ${idx}: cells.length=${cells.length}`);
+        if (cells.length > 3) {
+          const countText = cells[3].textContent.trim();
+          const count = parseInt(countText);
+          console.log(`saveMapping row ${idx}: w=${w}, h=${h}, countText="${countText}", count=${count}, cat=${sel.value}`);
+          bumpTypeStats.push({
+            w: w,
+            h: h,
+            count: count,
+            cat: sel.value,
+          });
+        }
+      }
+    });
+    log(`✓ 收集 ${bumpTypeStats.length} 個 Bump Type 分類`, "dim");
+    console.log("saveMapping: final bumpTypeStats =", JSON.stringify(bumpTypeStats));
+
+    const data = await apiPost("/api/save_mapping", {
+      file_path: currentGDS,
+      out_dir:   document.getElementById("outDir").value.trim(),
+      rows:      currentRows,
+      bump_type_stats: bumpTypeStats,
+    });
+    if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("儲存失敗", data.error); return; }
+    log(`✓ 已儲存: ${data.path}`, "ok");
+    const mapFname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
+    addSessionFile(mapFname, "~2KB");
+    updateDefaultLayerMappingTable();  // 更新預設層對應表
+    showModal("儲存完成", `Layer Mapping 已儲存：\n${data.path}`);
+  } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
+  setProgress(100);
+}
+
+// ── 自動打開文件 ──────────────────────────────────────────────────────────────
+function openFile(filepath) {
+  // 提取文件名（支持 Windows 和 Unix 路徑）
+  let fname = filepath;
+  if (filepath.includes('\\')) {
+    fname = filepath.split('\\').pop();
+  } else if (filepath.includes('/')) {
+    fname = filepath.split('/').pop();
+  }
+
+  // 對文件名進行 URL 編碼（處理特殊字符）
+  const encodedName = encodeURIComponent(fname);
+  const url = `http://127.0.0.1:5000/output/${encodedName}`;
+  console.log("openFile: filepath=", filepath, "fname=", fname, "url=", url);
+
+  // 直接打開，不進行存在性檢查（減少失敗可能）
+  try {
+    if (fname.endsWith('.html')) {
+      log(`✓ 自動打開 HTML: ${fname}`, "info");
+      console.log("Opening HTML with:", url);
+      // 方案 1：用隱藏 <a> 標籤點擊（更可靠）
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (fname.endsWith('.pdf')) {
+      log(`✓ 自動打開 PDF: ${fname}`, "info");
+      console.log("Opening PDF with:", url);
+      // PDF 方案 1：用隱藏 <a> 標籤（無 download 屬性，讓瀏覽器決定）
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (fname.endsWith('.png') || fname.endsWith('.jpg') || fname.endsWith('.jpeg')) {
+      log(`✓ 自動打開圖片: ${fname}`, "info");
+      console.log("Opening image with:", url);
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else if (fname.endsWith('.xlsx') || fname.endsWith('.csv')) {
+      // Excel 和 CSV 不直接打開，改為打開資料夾讓用戶手動選擇
+      const outDir = document.getElementById("outDir").value.trim();
+      log(`✓ 打開資料夾…`, "info");
+      openOutputFolder(outDir);
+    }
+  } catch(err) {
+    const diagMsg = `無法打開文件\n\n文件名:\n${fname}\n\nURL:\n${url}\n\n錯誤: ${err.message}\n\n請嘗試:\n1. 手動複製 URL 到瀏覽器\n2. 檢查「檢查輸出檔案」確認文件存在`;
+    log(`❌ 無法打開: ${fname}`, "err");
+    showModal("文件打開失敗", diagMsg);
+  }
+}
+
+// ── GDS 轉圖片 ────────────────────────────────────────────────────────────────
+async function runImage() {
+  if (!scanned) return;
+  log("渲染 GDS 圖片…", "info");
+  setProgress(40);
+  try {
+    const data = await apiPost("/api/run_image", {
+      file_path: currentGDS,
+      out_dir:   document.getElementById("outDir").value.trim(),
+    });
+    if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("執行失敗", data.error); return; }
+    log(`✓ 輸出: ${data.path}`, "ok");
+
+    // 顯示可點擊的連結
+    const fname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
+    const url = `/output/${encodeURIComponent(fname)}`;
+    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">GDS 圖片已輸出
+
+檔案路徑:
+${data.path}
+
+<a href="${url}" target="_blank" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px;">✓ 打開 PNG 圖片</a></div>`;
+    showModal("GDS 圖片輸出完成", htmlMsg, true);
+    addSessionFile(fname, "~130KB");
+  } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
+  setProgress(100);
+}
+
+// ── 輸出 PAD Excel ────────────────────────────────────────────────────────────
+async function runXlsx() {
+  if (!scanned) return;
+  log("生成 PAD Excel（含圖片）…", "info");
+  setProgress(30);
+  try {
+    const overrides = getBumpTypeOverrides();
+    const windowUm = parseInt(document.getElementById("windowUm").value) || 3500;
+    console.log("runXlsx overrides:", overrides, "window_um:", windowUm);
+    log(`使用 Bump Type 分類覆寫：${JSON.stringify(overrides)}`, "dim");
+    log(`簡圖區域寬度：${windowUm}µm`, "dim");
+    const data = await apiPost("/api/run_xlsx", {
+      file_path: currentGDS,
+      out_dir:   document.getElementById("outDir").value.trim(),
+      overrides,
+      window_um: windowUm,
+    });
+    if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("執行失敗", data.error); return; }
+    log(`✓ Excel 輸出: ${data.path}`, "ok");
+
+    // 顯示可點擊的連結 + 打開資料夾按鈕
+    const fname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
+    const outDir = document.getElementById("outDir").value.trim();
+    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">Excel 已輸出
+
+檔案名稱: ${fname}
+
+檔案路徑:
+${data.path}
+
+<button data-dir="${outDir}" onclick="openOutputFolder(this.dataset.dir)" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #2d9f3b; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer;">✓ 打開資料夾</button></div>`;
+    showModal("Excel 輸出完成", htmlMsg, true);
+    addSessionFile(fname, "~170KB");
+  } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
+  setProgress(100);
+}
+
+// ── Bump / Amark 分析 ─────────────────────────────────────────────────────────
+async function runElements() {
+  if (!scanned) return;
+  log("執行 Bump / Amark 元件分析…", "info");
+  setProgress(40);
+  try {
+    const data = await apiPost("/api/run_elements", {
+      file_path: currentGDS,
+      out_dir:   document.getElementById("outDir").value.trim(),
+    });
+    if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("執行失敗", data.error); return; }
+    log(`✓ Chip: ${data.chip_w} × ${data.chip_h} \u00B5m`, "ok");
+    log(`✓ Bumps: ${data.bumps}  (INPUT ${data.input} / OUTPUT ${data.output} / DUMMY ${data.dummy})`, "ok");
+    log(`✓ Amarks: ${data.amarks.length}`, "ok");
+    if (data.type_stats && data.type_stats.length) {
+      let typeStats = data.type_stats;
+      // 若有已保存的 Bump Type 分類，套用到當前的 type_stats
+      if (data.bump_type_stats && data.bump_type_stats.length) {
+        const savedOverrides = {};
+        data.bump_type_stats.forEach(b => {
+          savedOverrides[`${b.w},${b.h}`] = b.cat;
+        });
+        typeStats = typeStats.map(t => ({
+          ...t,
+          cat: savedOverrides[`${t.w},${t.h}`] || t.cat,
+        }));
+        log(`✓ 已載入已儲存的 Bump Type 分類`, "ok");
+      }
+      populateBumpTypeTable(typeStats);
+      log(`✓ Bump Type 分類表：${typeStats.length} 種，請在右側面板確認`, "ok");
+      // 自動切換到 Bump Type 標籤頁
+      setTimeout(() => switchTab("bumptypeTab"), 100);
+    } else {
+      log("⚠ 未收到 type_stats，請重啟 server", "warn");
+    }
+    showModal("元件分析完成", data.message);
+  } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
+  setProgress(100);
+}
+
+// ── Bump Rule 檢查 ──────────────────────────────────────────────────────────
+async function runBumpCheck() {
+  if (!scanned) return;
+  log("執行 Bump Rule 檢查…", "info");
+  setProgress(20);
+  try {
+    // 先執行快速概要檢查
+    log("掃描 Bump Layer…", "dim");
+    const summary = await apiPost("/api/check_bump_summary", {
+      file_path: currentGDS,
+    });
+
+    console.log("Bump summary response:", summary);
+
+    if (summary.error) {
+      log(`概要檢查失敗: ${summary.error}`, "err");
+      if (summary.error_detail) log(`詳情: ${summary.error_detail}`, "dim");
+      showModal("檢查失敗", summary.error);
+      return;
+    }
+
+    if (!summary.success) {
+      log(`概要檢查失敗: ${summary.message}`, "err");
+      showModal("檢查失敗", summary.message);
+      return;
+    }
+
+    log(`✓ 掃描結果: ${summary.message || ""}`, "ok");
+
+    if (summary.total_bump_polygons && summary.total_bump_polygons > 0) {
+      log(`✓ 偵測到 Bump Layer: ${summary.bump_layers_found.join(", ")}`, "ok");
+      log(`✓ Bump 多邊形/Path: ${summary.total_bump_polygons} 個`, "ok");
+
+      setProgress(50);
+      log("執行詳細 Bump Rule 檢查（Perl）…", "dim");
+
+      const result = await apiPost("/api/run_bump_check", {
+        file_path: currentGDS,
+        out_dir:   document.getElementById("outDir").value.trim(),
+      });
+
+      console.log("Bump check result:", result);
+
+      if (result.error) {
+        log(`Bump Rule 檢查失敗: ${result.error}`, "err");
+        showModal("檢查失敗", result.error);
+        return;
+      }
+
+      if (result.success) {
+        log(`✓ Bump Rule 檢查完成`, "ok");
+
+        // 顯示檢查版本
+        if (result.note) {
+          log(`  ℹ ${result.note}`, "dim");
+        } else {
+          log(`  ℹ 使用 Python Bump Check`, "dim");
+        }
+
+        // 顯示統計
+        if (result.total_bumps !== undefined) {
+          log(`  • 偵測到 Bump: ${result.total_bumps} 個`, "ok");
+        }
+        if (result.total_violations !== undefined) {
+          log(`  • 檢出違規: ${result.total_violations} 個`, result.total_violations > 0 ? "warn" : "ok");
+        }
+
+        // 列舉輸出檔案
+        const getFileName = (path) => {
+          if (!path) return null;
+          return path.includes('/') ? path.split('/').pop() : path.split('\\').pop();
+        };
+
+        if (result.violations_csv) {
+          const fname = getFileName(result.violations_csv);
+          log(`  • 違規 CSV: ${fname}`, "info");
+        }
+        if (result.boe_violations_csv) {
+          const fname = getFileName(result.boe_violations_csv);
+          log(`  • BOE 違規: ${fname}`, "info");
+        }
+        if (result.report_html) {
+          const fname = getFileName(result.report_html);
+          log(`  • HTML 報告: ${fname}`, "info");
+        }
+        if (result.report_pdf) {
+          const fname = getFileName(result.report_pdf);
+          log(`  • PDF 報告: ${fname}`, "info");
+        }
+
+        const summary = result.total_bumps ? `\n\nBump 數量: ${result.total_bumps}\n違規數量: ${result.total_violations}` : "";
+        log(`  輸出目錄: ${result.output_dir}`, "dim");
+
+        // 組合輸出訊息（使用 HTML 格式，可點擊連結）
+        let reportMsg = `<div style="font-family: monospace; line-height: 1.6; white-space: pre-wrap;">檢查已完成
+
+輸出目錄:
+${result.output_dir}${summary}
+
+生成的文件:`;
+
+        if (result.report_html) {
+          const htmlFname = result.report_html.includes('\\') ? result.report_html.split('\\').pop() : result.report_html.split('/').pop();
+          const htmlUrl = `/output/${encodeURIComponent(htmlFname)}`;
+          reportMsg += `\n✓ <a href="${htmlUrl}" target="_blank" style="color: #0066cc; text-decoration: underline;">打開 HTML 報告: ${htmlFname}</a>`;
+          log(`✓ HTML 報告已生成: ${htmlFname}`, "ok");
+          addSessionFile(htmlFname, "35.8KB");
+        }
+
+        if (result.report_pdf) {
+          const pdfFname = result.report_pdf.includes('\\') ? result.report_pdf.split('\\').pop() : result.report_pdf.split('/').pop();
+          const pdfUrl = `/output/${encodeURIComponent(pdfFname)}`;
+          reportMsg += `\n✓ <a href="${pdfUrl}" target="_blank" style="color: #0066cc; text-decoration: underline;">打開 PDF 報告: ${pdfFname}</a>`;
+          log(`✓ PDF 報告已生成: ${pdfFname}`, "ok");
+          addSessionFile(pdfFname, "~1MB");
+        }
+
+        if (!result.report_html && !result.report_pdf) {
+          reportMsg += `\n❌ 無法生成 HTML/PDF 報告`;
+          log(`⚠ 未找到 HTML 或 PDF 報告`, "warn");
+        }
+
+        if (result.violations_csv) {
+          const csvFname = result.violations_csv.includes('\\') ? result.violations_csv.split('\\').pop() : result.violations_csv.split('/').pop();
+          reportMsg += `\n✓ TM 違規 CSV: ${csvFname}`;
+          addSessionFile(csvFname, "~3KB");
+        }
+
+        if (result.boe_violations_csv) {
+          const boeFname = result.boe_violations_csv.includes('\\') ? result.boe_violations_csv.split('\\').pop() : result.boe_violations_csv.split('/').pop();
+          reportMsg += `\n✓ BOE 違規 CSV: ${boeFname}`;
+          addSessionFile(boeFname, "<1KB");
+        }
+
+        reportMsg += `\n\n<button data-dir="${result.output_dir}" onclick="openOutputFolder(this.dataset.dir)" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #ff6600; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; font-size: 14px;">✓ 打開資料夾查看所有檔案</button>`;
+        reportMsg += `</div>`;
+
+        showModal("Bump Rule 檢查完成", reportMsg, true);  // 使用 HTML 模式
+      } else {
+        log(`⚠ Bump Rule 檢查出現問題 (code ${result.return_code})`, "warn");
+        log(`詳情: ${result.stderr || result.message}`, "warn");
+        showModal("檢查警告", result.message || "檢查過程出現問題，請查看日誌");
+      }
+    } else {
+      log(`⚠ 未偵測到 Bump Layer（期望 Layer 224 或 225）`, "warn");
+      log(`  掃描結果: ${summary.message || ""}`, "dim");
+      log(`  建議: 檢查左側 Layer 表是否包含 Layer 224 或 225 且有 polygons`, "dim");
+      showModal("檢查結果",
+        `此 GDS 檔案未包含 Bump Layer。\n\n` +
+        `掃描結果: ${summary.message || "無數據"}\n\n` +
+        `建議: 檢查左側 Layer 表是否包含 Layer 224 或 225（推測用途為 "Bump / PAD"）`);
+    }
+  } catch(err) {
+    log(`連線失敗: ${err.message}`, "err");
+    console.error("Bump check error:", err);
+  }
+  setProgress(100);
+}
+
+function populateBumpTypeTable(typeStats) {
+  console.log("populateBumpTypeTable called with", typeStats.length, "items");
+  const tbody = document.getElementById("btypeTbody");
+  tbody.innerHTML = "";
+
+  typeStats.forEach((t, idx) => {
+    const tr = document.createElement("tr");
+    // count 可能是 undefined 或 NaN，用 0 作為後備值
+    const count = (t.count !== undefined && !isNaN(t.count)) ? t.count : 0;
+    console.log(`populateBumpTypeTable row ${idx}: w=${t.w}, h=${t.h}, count=${count}, cat=${t.cat}`);
+
+    const sel = `<select class="cat-sel sel-${t.cat}" data-w="${t.w}" data-h="${t.h}" onchange="onCatChange(this)">
+      <option value="INPUT"  ${t.cat==="INPUT" ?"selected":""}>INPUT</option>
+      <option value="OUTPUT" ${t.cat==="OUTPUT"?"selected":""}>OUTPUT</option>
+      <option value="DUMMY"  ${t.cat==="DUMMY" ?"selected":""}>DUMMY</option>
+    </select>`;
+    tr.innerHTML = `<td>${idx+1}</td><td>${t.w}</td><td>${t.h}</td><td>${count}</td><td>${sel}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // 顯示 Bump Type 表格，隱藏 empty state
+  document.getElementById("bumptypeEmpty").style.display = "none";
+  document.getElementById("bumptypeTable").style.display = "table";
+
+  log(`✓ 已恢復 Bump Type 分類表（${typeStats.length} 種分類）`, "ok");
+
+  // 如果有已加載的 Bump Type 分類，立即應用（防止重複）
+  if (loadedBumpTypeStats && loadedBumpTypeStats.length > 0) {
+    console.log("populateBumpTypeTable: applying loaded stats", loadedBumpTypeStats);
+    applyBumpTypeStats(loadedBumpTypeStats);
+  }
+}
+
+function applyBumpTypeStats(bumpTypeStats) {
+  // 應用已加載的 Bump Type 分類到表格
+  const rows = document.querySelectorAll("#btypeTbody tr");
+  let syncCount = 0;
+  let matchedCount = 0;
+
+  console.log("applyBumpTypeStats: applying", bumpTypeStats.length, "items to", rows.length, "rows");
+
+  rows.forEach((tr, idx) => {
+    const sel = tr.querySelector("select.cat-sel");
+    if (sel) {
+      const htmlW = parseFloat(sel.dataset.w);
+      const htmlH = parseFloat(sel.dataset.h);
+
+      // 查找匹配的項目（容差 0.0001）
+      const matching = bumpTypeStats.find(bts => {
+        const btsW = parseFloat(bts.w);
+        const btsH = parseFloat(bts.h);
+        return Math.abs(htmlW - btsW) < 0.0001 && Math.abs(htmlH - btsH) < 0.0001;
+      });
+
+      if (matching) {
+        matchedCount++;
+        const oldCat = sel.value;
+        if (matching.cat !== oldCat) {
+          sel.value = matching.cat;
+          sel.className = `cat-sel sel-${matching.cat}`;
+          console.log(`Row ${idx}: changed from ${oldCat} to ${matching.cat}`);
+          syncCount++;
+        } else {
+          console.log(`Row ${idx}: already ${oldCat}, no change needed`);
+        }
+      }
+    }
+  });
+
+  if (matchedCount > 0) {
+    log(`✓ 已應用 ${matchedCount} 個已儲存的 Bump Type 分類 (${syncCount} 項改變)`, "ok");
+  } else {
+    log(`⚠ 未找到可匹配的 Bump Type 項目`, "warn");
+  }
+}
+
+function onCatChange(sel) {
+  sel.className = `cat-sel sel-${sel.value}`;
+}
+
+// ── 標籤頁切換 ────────────────────────────────────────────────────────────────
+function switchTab(tabName) {
+  // 隱藏所有 table-area
+  document.querySelectorAll(".table-area").forEach(area => {
+    area.style.display = "none";
+  });
+  // 移除所有 tab-btn 的 active 狀態
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.remove("active");
+  });
+  // 顯示選定的標籤
+  if (tabName === "layerTab") {
+    document.getElementById("tableArea").style.display = "block";
+    document.querySelector('[data-tab="layerTab"]').classList.add("active");
+  } else if (tabName === "bumptypeTab") {
+    document.getElementById("bumptypeArea").style.display = "block";
+    document.querySelector('[data-tab="bumptypeTab"]').classList.add("active");
+  }
+}
+
+function getBumpTypeOverrides() {
+  const overrides = {};
+  const rows = document.querySelectorAll("#btypeTbody tr");
+  if (rows.length === 0) {
+    console.warn("getBumpTypeOverrides: 未找到 Bump Type 表格行");
+    return overrides;
+  }
+  rows.forEach(tr => {
+    const sel = tr.querySelector("select.cat-sel");
+    if (sel && sel.dataset.w && sel.dataset.h) {
+      overrides[`${sel.dataset.w},${sel.dataset.h}`] = sel.value;
+    }
+  });
+  console.log("getBumpTypeOverrides result:", overrides);
+  return overrides;
+}
+
+// ── 打開輸出資料夾 ────────────────────────────────────────────────────────────
+async function openOutputFolder(outDir) {
+  try {
+    const response = await fetch(API + "/api/open_folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ out_dir: outDir })
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      log(`⚠ 無法打開資料夾: ${data.error}`, "warn");
+      showModal("提示", `無法打開資料夾\n\n路徑: ${outDir}\n\n錯誤: ${data.error}`);
+    } else {
+      log(`✓ 已打開資料夾`, "ok");
+    }
+  } catch(err) {
+    log(`❌ 連線失敗: ${err.message}`, "err");
+    showModal("連線失敗", `${err.message}`);
+  }
+}
+
+// ── 診斷工具：顯示本次會話生成的文件 ────────────────────────────────────────
+async function showOutputFiles() {
+  let msg = `本次會話生成的文件\n`;
+
+  if (sessionGeneratedFiles.length === 0) {
+    msg += `\n（目前尚無生成文件）\n\n提示:\n- 執行「掃描 GDS」產生 Layer Mapping JSON\n- 執行「GDS 轉圖片」產生 PNG 圖片\n- 執行「輸出 PAD Excel」產生 XLSX 檔案\n- 執行「Bump Rule 檢查」產生 HTML/PDF 報告及 CSV 違規`;
+  } else {
+    msg += `\n總共 ${sessionGeneratedFiles.length} 個檔案:\n\n`;
+    sessionGeneratedFiles.forEach(f => {
+      msg += `✓ ${f.name} (${f.size})\n`;
+    });
+  }
+
+  showModal("本次會話檔案清單", msg);
+  log(`✓ 本次會話檔案: ${sessionGeneratedFiles.length} 個`, "ok");
+}
+
+
+// ── 追踪本次会话生成的文件（使用 Set 避免重複） ────────────────────────────
+let sessionGeneratedFiles = [];
+let sessionFileNames = new Set();
+
+function addSessionFile(fname, size) {
+  if (!sessionFileNames.has(fname)) {
+    sessionFileNames.add(fname);
+    sessionGeneratedFiles.push({name: fname, size: size});
+  }
+}
+
+// ── 初始化 ────────────────────────────────────────────────────────────────────
+log("GDS Reader v1.0 已就緒", "info");
+
+function setServerStatus(online) {
+  document.getElementById("offlineBanner").style.display = online ? "none" : "block";
+  // 調整主體頂部偏移，避免被 banner 遮住
+  document.querySelector("main").style.marginTop = online ? "0" : "38px";
+}
+
+// 偵測伺服器狀態（每 5 秒重試，直到上線）
+let _serverOnline = false;
+function checkServer() {
+  fetch(API + "/", {mode:"no-cors"})
+    .then(() => {
+      if (!_serverOnline) {
+        _serverOnline = true;
+        setServerStatus(true);
+        log("伺服器連線正常 ✓", "ok");
+      }
+    })
+    .catch(() => {
+      _serverOnline = false;
+      setServerStatus(false);
+      if (document.getElementById("logArea").children.length <= 1)
+        log("伺服器未啟動 — 請雙擊 start_gui.bat 或執行: python gds_server.py", "err");
+      setTimeout(checkServer, 5000);
+    });
+}
+checkServer();
+</script>
+</body>
+</html>

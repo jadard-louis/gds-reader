@@ -1,0 +1,19 @@
+# 本機環境
+portable_python/
+perl/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# 輸出檔案
+output/
+*.xlsx
+*.png
+*.gds
+*.gdsii
+
+# 暫存
+*.tmp
+*.log
+temp/
