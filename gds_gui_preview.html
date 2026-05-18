@@ -1426,7 +1426,7 @@ function openFile(filepath) {
 
   // 對文件名進行 URL 編碼（處理特殊字符）
   const encodedName = encodeURIComponent(fname);
-  const url = `http://127.0.0.1:5000/output/${encodedName}`;
+  const url = `${API}/output/${encodedName}`;
   console.log("openFile: filepath=", filepath, "fname=", fname, "url=", url);
 
   // 直接打開，不進行存在性檢查（減少失敗可能）
