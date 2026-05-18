@@ -1376,7 +1376,9 @@ async function onJSONFileChosen(input) {
       loadedBumpTypeStats = [];
       console.log("loadMapping: No bump_type_stats in JSON", "data.bump_type_stats =", data.bump_type_stats);
       if (!data.bump_type_stats || data.bump_type_stats.length === 0) {
-        log(`ℹ Mapping JSON 中無 Bump Type 分類數據`, "dim");
+        log(`ℹ Mapping JSON 無 Bump Type 分類，自動執行 Bump / Amark 分析…`, "dim");
+        // 自動執行分析以還原 Bump Type 分類表
+        if (currentGDS) setTimeout(() => runElements(), 300);
       }
     }
 
