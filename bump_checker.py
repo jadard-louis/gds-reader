@@ -215,58 +215,85 @@ def run_bump_check_python(gds_file: str, out_dir: str = None, original_name: str
 
             print(f"[DEBUG] Starting HTML content generation... (bumps: {len(bumps)}, violations: {len(violations)})")
 
+            viol_count = len(violations)
+            status_color = "#ff5252" if viol_count > 0 else "#00e676"
+            status_text  = f"{viol_count} VIOLATIONS" if viol_count > 0 else "PASS — No Violations"
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # ── Bump rows ──
+            bump_rows = ""
+            for i, b in enumerate(bumps):
+                cat = b.get('cat', b.get('type', '—'))
+                bump_rows += (
+                    f"<tr><td>{i+1}</td><td>{b.get('layer','')}</td>"
+                    f"<td>{b['w']:.3f}</td><td>{b['h']:.3f}</td>"
+                    f"<td>{b['x_min']:.3f}</td><td>{b['y_min']:.3f}</td>"
+                    f"<td>{cat}</td></tr>\n"
+                )
+
+            # ── Violation rows ──
+            if violations:
+                viol_rows = ""
+                for v in violations:
+                    viol_rows += (
+                        f"<tr><td>{v.get('type','')}</td><td>{v.get('message','')}</td>"
+                        f"<td>({v.get('x',0):.3f}, {v.get('y',0):.3f})</td></tr>\n"
+                    )
+                viol_section = f"""
+    <h2 style="color:#ff5252;margin-top:36px;">⚠ Violations ({viol_count})</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Message</th><th>Position (µm)</th></tr></thead>
+      <tbody>{viol_rows}</tbody>
+    </table>"""
+            else:
+                viol_section = """
+    <h2 style="color:#00e676;margin-top:36px;">✓ Violations</h2>
+    <p style="color:#00e676;font-size:16px;font-weight:600;">No violations found — All rules passed.</p>"""
+
             html_content = f"""<!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <meta charset="utf-8">
-    <title>Bump Rule Check Report</title>
-    <style>
-        body {{ font-family: Arial; margin: 20px; }}
-        h1 {{ color: #333; }}
-        .summary {{ background: #f0f0f0; padding: 10px; border-radius: 5px; margin: 10px 0; }}
-        .violations {{ margin: 20px 0; }}
-        table {{ border-collapse: collapse; width: 100%; }}
-        th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-        th {{ background: #ddd; }}
-        .error {{ color: #d00; }}
-    </style>
+  <meta charset="utf-8">
+  <title>Bump Rule Check — {gds_base}</title>
+  <style>
+    *{{margin:0;padding:0;box-sizing:border-box}}
+    body{{font-family:'Segoe UI',Arial,sans-serif;background:#0b0e1a;color:#e2e8f8;padding:24px}}
+    h1{{font-size:20px;font-weight:700;color:#00d4ff;letter-spacing:1px;margin-bottom:4px}}
+    .sub{{font-size:11px;color:#7a849e;letter-spacing:2px;margin-bottom:24px}}
+    .summary{{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:28px}}
+    .card{{background:#131728;border:1px solid #2a3050;border-radius:8px;padding:14px 20px;min-width:160px}}
+    .card .label{{font-size:10px;color:#7a849e;letter-spacing:1px;margin-bottom:4px}}
+    .card .val{{font-size:22px;font-weight:700}}
+    .status-card{{border-color:{status_color};}}
+    .status-card .val{{color:{status_color}}}
+    h2{{font-size:13px;font-weight:600;color:#00d4ff;letter-spacing:1px;margin-bottom:10px;border-bottom:1px solid #2a3050;padding-bottom:6px}}
+    table{{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:32px}}
+    thead tr{{background:#1c2135}}
+    th{{padding:8px 10px;text-align:left;color:#7a849e;font-weight:600;letter-spacing:.5px;border-bottom:1px solid #2a3050}}
+    td{{padding:7px 10px;border-bottom:1px solid #1c2135;color:#c8d0e0}}
+    tbody tr:hover{{background:#131728}}
+    tbody tr:nth-child(even){{background:#0f1220}}
+    .pass{{color:#00e676}} .fail{{color:#ff5252}}
+    @media print{{body{{background:#fff;color:#000}} .card{{border-color:#ccc}} h1,.card .val{{color:#003366}} td,th{{color:#000}} table{{font-size:11px}}}}
+  </style>
 </head>
 <body>
-    <h1>Bump Rule Check Report (Python)</h1>
-    <div class="summary">
-        <p><strong>GDS File:</strong> {gds_base}</p>
-        <p><strong>Total Bumps:</strong> {len(bumps)}</p>
-        <p><strong>Violations:</strong> {len(violations)}</p>
-        <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    </div>
+  <h1>GDS◆READER — Bump Rule Check Report</h1>
+  <div class="sub">Generated: {ts} &nbsp;|&nbsp; {gds_base}</div>
 
-    <h2>Bump Summary (first 20)</h2>
-    <table>
-        <tr><th>Index</th><th>Layer</th><th>Width (um)</th><th>Height (um)</th><th>X (um)</th><th>Y (um)</th></tr>
-"""
-            # 只顯示前 20 個 bump 以避免 HTML 過大
-            for i, bump in enumerate(bumps[:20]):
-                html_content += f"<tr><td>{i}</td><td>{bump['layer']}</td><td>{bump['w']:.2f}</td><td>{bump['h']:.2f}</td><td>{bump['x_min']:.2f}</td><td>{bump['y_min']:.2f}</td></tr>"
+  <div class="summary">
+    <div class="card"><div class="label">TOTAL BUMPS</div><div class="val">{len(bumps)}</div></div>
+    <div class="card status-card"><div class="label">STATUS</div><div class="val">{status_text}</div></div>
+    <div class="card"><div class="label">VIOLATIONS</div><div class="val" style="color:{status_color}">{viol_count}</div></div>
+    <div class="card"><div class="label">GDS FILE</div><div class="val" style="font-size:13px;word-break:break-all">{gds_base}</div></div>
+  </div>
 
-            if len(bumps) > 20:
-                html_content += f"<tr><td colspan='6'>... and {len(bumps) - 20} more bumps</td></tr>"
-
-            html_content += """
-    </table>
-
-    <h2>Violations</h2>
-"""
-            if violations:
-                html_content += "<table><tr><th>Type</th><th>Message</th><th>Position</th></tr>"
-                for v in violations[:50]:  # 限制前 50 個違規
-                    html_content += f"<tr class='error'><td>{v['type']}</td><td>{v['message']}</td><td>({v['x']:.2f}, {v['y']:.2f})</td></tr>"
-                if len(violations) > 50:
-                    html_content += f"<tr><td colspan='3'>... and {len(violations) - 50} more violations</td></tr>"
-                html_content += "</table>"
-            else:
-                html_content += "<p style='color: green;'><strong>No violations found!</strong></p>"
-
-            html_content += """
+  <h2>Bump List ({len(bumps)} total)</h2>
+  <table>
+    <thead><tr><th>#</th><th>Layer</th><th>W (µm)</th><th>H (µm)</th><th>X min (µm)</th><th>Y min (µm)</th><th>Type</th></tr></thead>
+    <tbody>{bump_rows}</tbody>
+  </table>
+  {viol_section}
 </body>
 </html>
 """

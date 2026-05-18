@@ -1531,15 +1531,18 @@ async function runImage() {
     if (data.error) { log(`錯誤: ${data.error}`, "err"); showModal("執行失敗", data.error); return; }
     log(`✓ 輸出: ${data.path}`, "ok");
 
-    // 顯示可點擊的連結
     const fname = data.path.includes('\\') ? data.path.split('\\').pop() : data.path.split('/').pop();
-    const url = `/output/${encodeURIComponent(fname)}`;
-    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">GDS 圖片已輸出
+    const url = `${API}/output/${encodeURIComponent(fname)}`;
+    // 自動下載 PNG
+    const a = document.createElement('a'); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    log(`⬇ 自動下載: ${fname}`, "ok");
+    const htmlMsg = `<div style="font-family: monospace; line-height: 1.8;">GDS 圖片已輸出並下載
 
-檔案路徑:
-${data.path}
+檔案: ${fname}
 
-<a href="${url}" target="_blank" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px;">✓ 打開 PNG 圖片</a></div>`;
+<a href="${url}" target="_blank" style="display:inline-block;margin-top:10px;padding:8px 16px;background:#0066cc;color:white;text-decoration:none;border-radius:4px;">✓ 在瀏覽器開啟</a>
+<a href="${url}" download="${fname}" style="display:inline-block;margin-top:10px;margin-left:8px;padding:8px 16px;background:#2d9f3b;color:white;text-decoration:none;border-radius:4px;">⬇ 重新下載</a></div>`;
     showModal("GDS 圖片輸出完成", htmlMsg, true);
     addSessionFile(fname, "~130KB");
   } catch(err) { log(`連線失敗: ${err.message}`, "err"); }
