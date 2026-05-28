@@ -108,6 +108,8 @@ def get_amarks(top, scale):
             h   = float(pts[:,1].max() - pts[:,1].min())
             if w * h < 1000:   # 過濾過小的多餘標記（< ~32×32 μm²）
                 continue
+            if max(w, h) > 2000:   # 排除 chip outline 等超大 polygon
+                continue
             cx  = round(float(pts[:,0].mean()), 3)
             cy  = round(float(pts[:,1].mean()), 3)
             key = (cx, cy)
@@ -430,11 +432,16 @@ def _draw_amark_symbol(ax, cx, cy, size, color="red", lw=0.8, aspect=1.0):
 def _collect_amark_polys(top, scale):
     """Return list of pts arrays for all AMARK polygons (outer rect + inner cross).
     Outer: AMARK_LAYER 4-pt rectangles.
-    Inner: TEXT_NAME_LAYER polygons whose centroid falls inside an outer bbox."""
+    Inner: TEXT_NAME_LAYER polygons whose centroid falls inside an outer bbox.
+    排除 chip outline 等超大 polygon（適用 AMARK_LAYER 與 chip_size 同 layer 的情況，如 JD9365T）。"""
     outer_list, inner_candidates = [], []
     for poly in top.polygons:
         pts = np.array(poly.points) * scale
         key = (poly.layer, poly.datatype)
+        bw = float(pts[:,0].max() - pts[:,0].min())
+        bh = float(pts[:,1].max() - pts[:,1].min())
+        if max(bw, bh) > 2000:   # 排除 chip outline 等超大 polygon
+            continue
         if key == AMARK_LAYER and len(poly.points) == 4:
             outer_list.append(pts)
         elif key == TEXT_NAME_LAYER:
@@ -450,7 +457,7 @@ def _collect_amark_polys(top, scale):
     return result
 
 
-def render_chip_overview(top, scale, chip_w, chip_h, bumps=None) -> bytes:
+def render_chip_overview(top, scale, chip_w, chip_h, bumps=None, bump_symbols=None) -> bytes:
     """生成晶片全覽圖（白底，bump 黃色，外框黑線，寬高標注，pitch 標注）回傳 PNG bytes"""
     _trapz = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
@@ -521,6 +528,62 @@ def render_chip_overview(top, scale, chip_w, chip_h, bumps=None) -> bytes:
     ax.text(cx + W*0.027, cy, "X", fontsize=10, color="red", ha="left", va="center", fontweight="bold")
     ax.text(cx, cy + H*0.20, "Y", fontsize=10, color="red", ha="center", va="bottom", fontweight="bold")
     ax.text(cx + W*0.006, cy - H*0.04, "(0,0)", fontsize=8, color="red", ha="left", va="top")
+
+    # ── Option A: Symbol labels on bump groups ────────────────────────────────
+    if bumps and bump_symbols:
+        _mid_y = (ymin + ymax) / 2
+        _sym_rep = {}  # symbol → (cx, cy, h)
+        for b in bumps:
+            _cat = classify(b)
+            _key = (_cat, (round(b["w"]), round(b["h"])))
+            _sym = bump_symbols.get(_key)
+            if _sym and (_sym not in _sym_rep or b["cx"] < _sym_rep[_sym][0]):
+                _sym_rep[_sym] = (b["cx"], b["cy"], b["h"])
+        for _sym, (_lx, _lcy, _lh) in sorted(_sym_rep.items()):
+            _is_bot = _lcy < _mid_y
+            _ty = (_lcy + _lh/2 + H*0.01) if _is_bot else (_lcy - _lh/2 - H*0.01)
+            ax.text(_lx, _ty, _sym, ha="center",
+                    va="bottom" if _is_bot else "top",
+                    fontsize=6.5, fontweight="bold", color="black", zorder=15,
+                    bbox=dict(boxstyle="square,pad=0.08", fc="white", ec="none", alpha=0.85))
+    # AMARK 輪廓保留，D1/D2 文字標籤移至放大圖顯示
+
+    # ── Option B: Edge distance arrows (A4/A5/A7) ────────────────────────────
+    if bumps:
+        _in_list  = [b for b in bumps if classify(b) == "INPUT"]
+        _out_list = [b for b in bumps if classify(b) == "OUTPUT"]
+        _arr_kw = dict(arrowstyle="<->", color="#0070C0", lw=0.6)
+        _tk_kw  = dict(fontsize=6, color="#0070C0", fontweight="bold")
+
+        if _in_list:
+            # A4: BUMP to IC bottom edge (vertical arrow at leftmost INPUT bump)
+            _left_b   = min(_in_list, key=lambda b: b["cx"])
+            _a4_x     = _left_b["cx"]
+            _a4_b_top = _left_b["cy"] - _left_b["h"]/2
+            ax.annotate("", xy=(_a4_x, _a4_b_top), xytext=(_a4_x, ymin),
+                        arrowprops=_arr_kw, zorder=12)
+            ax.text(_a4_x + W*0.005, (ymin + _a4_b_top)/2, "A4",
+                    ha="left", va="center", **_tk_kw)
+
+            # A5: BUMP to IC side edge (horizontal arrow below chip)
+            _a5_lx = min(b["cx"] - b["w"]/2 for b in _in_list)
+            _a5_y  = ymin - H * 0.028
+            ax.annotate("", xy=(_a5_lx, _a5_y), xytext=(xmin, _a5_y),
+                        arrowprops=_arr_kw, zorder=12)
+            ax.text((xmin + _a5_lx)/2, _a5_y - H*0.008, "A5",
+                    ha="center", va="top", **_tk_kw)
+
+        # A7: OUTPUT-to-INPUT gap (vertical arrow at IC center)
+        if _in_list and _out_list:
+            _in_top  = max(b["cy"] + b["h"]/2 for b in _in_list)
+            _cxm     = (xmin + xmax) / 2
+            _near_o  = [b for b in _out_list if abs(b["cx"] - _cxm) <= (xmax-xmin)/4]
+            _out_bot = min(b["cy"] - b["h"]/2 for b in (_near_o or _out_list))
+            _a7_x    = _cxm  # IC center
+            ax.annotate("", xy=(_a7_x, _out_bot), xytext=(_a7_x, _in_top),
+                        arrowprops=_arr_kw, zorder=12)
+            ax.text(_a7_x + W*0.008, (_in_top + _out_bot)/2, "A7",
+                    ha="left", va="center", **_tk_kw)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
@@ -596,7 +659,28 @@ def render_chip_sections(top, scale, bumps=None, n=7) -> list:
     return results
 
 
-def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
+def compute_auto_window_um(bumps, chip_w):
+    """Compute recommended window_um based on dominant bump pitch and chip width."""
+    from collections import Counter as _C
+    if not bumps or not chip_w:
+        return max(int(round(chip_w * 0.10 / 500)) * 500 if chip_w else 3000, 1500)
+    wh_cnt = _C((round(b["w"]), round(b["h"])) for b in bumps)
+    rep_wh = wh_cnt.most_common(1)[0][0]
+    rep = sorted([b for b in bumps if round(b["w"]) == rep_wh[0] and round(b["h"]) == rep_wh[1]],
+                 key=lambda b: b["cx"])
+    target = chip_w * 0.10
+    if len(rep) >= 2:
+        dxs = [rep[i+1]["cx"] - rep[i]["cx"] for i in range(min(50, len(rep)-1))]
+        dxs_pos = [d for d in dxs if 0 < d < 500]
+        if dxs_pos:
+            med = sorted(dxs_pos)[len(dxs_pos) // 2]
+            target = med * 90
+    lo = max(chip_w * 0.09, 2500)
+    hi = chip_w * 0.25
+    return int(round(max(lo, min(hi, target)) / 500)) * 500
+
+
+def render_key_sections(top, scale, bumps=None, window_um=3500, bump_symbols=None) -> bytes:
     """5 個重點截面拼接：左EDGE + A1/A2/A3 樣本 + 右EDGE → 單張 PNG bytes
 
     Args:
@@ -641,17 +725,46 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
          if b["cx"] < _s4_x0 and (round(b["w"]),round(b["h"])) not in _types_r),
         None)
 
-    # Section 1: 3500μm window starting just before transition (show old+new types)
+    # AI fallback: find leftmost adjacent INPUT pair beyond section 0 (for A4 h-gap)
+    _best_in_cx = None
+    _in_ks_cx = sorted([b for b in _in_ks if b["cx"] > _s0_x1], key=lambda b: b["cx"])
+    for _ii in range(len(_in_ks_cx) - 1):
+        _bi, _bj = _in_ks_cx[_ii], _in_ks_cx[_ii+1]
+        if abs(_bi["cy"] - _bj["cy"]) < 5:
+            _gi = _bj["cx"] - _bj["w"]/2 - (_bi["cx"] + _bi["w"]/2)
+            if 0 < _gi < 200:
+                _best_in_cx = (_bi["cx"] + _bj["cx"]) / 2
+                break
+
+    # AI fallback: find rightmost adjacent OUTPUT pair before section 4 (for B7 h-gap)
+    _out_ks_all = [b for b in (bumps or []) if classify(b) == "OUTPUT"]
+    _best_out_cx = None
+    _out_ks_cx = sorted([b for b in _out_ks_all if b["cx"] < _s4_x0], key=lambda b: -b["cx"])
+    for _ii in range(len(_out_ks_cx) - 1):
+        _bi, _bj = _out_ks_cx[_ii], _out_ks_cx[_ii+1]  # right→left
+        if abs(_bi["cy"] - _bj["cy"]) < 5:
+            _go = _bi["cx"] - _bi["w"]/2 - (_bj["cx"] + _bj["w"]/2)
+            if 0 < _go < 300:
+                _best_out_cx = (_bi["cx"] + _bj["cx"]) / 2
+                break
+
+    # Section 1: transition (type change) or AI center on adjacent INPUT pair
     if _trans_l is not None:
         _s1_x0 = max(_s0_x1 + 50, _trans_l - _sec_w * 0.3)
         _s1_x1 = _s1_x0 + _sec_w
+    elif _best_in_cx is not None:
+        _s1_x0 = _best_in_cx - _sec_w / 2
+        _s1_x1 = _best_in_cx + _sec_w / 2
     else:
         _s1_x0 = _s0_x1; _s1_x1 = _s1_x0 + _sec_w
 
-    # Section 3: 3500μm window ending just after transition on right side
+    # Section 3: transition or AI center on adjacent OUTPUT pair
     if _trans_r is not None:
         _s3_x1 = min(_s4_x0 - 50, _trans_r + _sec_w * 0.3)
         _s3_x0 = _s3_x1 - _sec_w
+    elif _best_out_cx is not None:
+        _s3_x0 = _best_out_cx - _sec_w / 2
+        _s3_x1 = _best_out_cx + _sec_w / 2
     else:
         _s3_x1 = _s4_x0; _s3_x0 = _s3_x1 - _sec_w
 
@@ -697,6 +810,27 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
     n_in  = len(_in_keys_ks)
     n_out = len(_out_keys_ks)
     n_dum = len(_dum_keys_ks)
+
+    # Pre-compute OUTPUT h-pitch by grouping bumps into rows (same cy ±5um)
+    _out_hp_ks = None
+    if out_bumps_ks:
+        from collections import defaultdict as _dd_out
+        _out_row_g = _dd_out(list)
+        for _b in out_bumps_ks:
+            _out_row_g[round(_b["cy"] / 5) * 5].append(_b)
+        _best_out_row = max(_out_row_g.values(), key=len)
+        if len(_best_out_row) >= 2:
+            _br_s = sorted(_best_out_row, key=lambda b: b["cx"])
+            _odxs = [_br_s[j+1]["cx"] - _br_s[j]["cx"] for j in range(len(_br_s)-1)]
+            _odxs_pos = [d for d in _odxs if 0 < d < 300]
+            if _odxs_pos:
+                _out_hp_ks = sorted(_odxs_pos)[len(_odxs_pos) // 2]
+        if _out_hp_ks is None:
+            _oa = sorted(out_bumps_ks, key=lambda b: b["cx"])
+            _fb = [_oa[j+1]["cx"]-_oa[j]["cx"] for j in range(min(30, len(_oa)-1))]
+            _fb_pos = [d for d in _fb if 0 < d < 300]
+            if _fb_pos:
+                _out_hp_ks = sorted(_fb_pos)[len(_fb_pos)//2]
 
     # INPUT A4/A5
     _a4_bottom_y = min(b["cy"]-b["h"]/2 for b in in_bumps_ks) if in_bumps_ks else None
@@ -797,6 +931,31 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
             if _amark_rgt_top is None or _t > _amark_rgt_top:
                 _amark_rgt_top = _t
 
+    # 預先群聚 AMARK polygons → gap-based：相鄰 poly cx 差 > 500 um 開新 cluster
+    _am_polys_sorted = sorted(amark_polys, key=lambda p: float(p[:,0].mean()))
+    _am_marks = []  # list of [mark_cx, mark_cy, [polys]]
+    _AM_GAP = 500.0  # um；同一 AMARK mark 內 poly 間距不超過此值
+    for _apts in _am_polys_sorted:
+        _acx = float(_apts[:,0].mean())
+        _acy = float(_apts[:,1].mean())
+        if _am_marks and (_acx - float(_am_marks[-1][2][-1][:,0].mean())) < _AM_GAP:
+            _am_marks[-1][2].append(_apts)
+            _all_pts = np.vstack(_am_marks[-1][2])
+            _am_marks[-1][0] = float(_all_pts[:,0].mean())
+            _am_marks[-1][1] = float(_all_pts[:,1].mean())
+        else:
+            _am_marks.append([_acx, _acy, [_apts]])
+
+    # 以 cluster bounding box 過濾雜散小聚合（< 40um）及 chip outline 等超大聚合（> 2000um）
+    _am_marks_valid = []
+    for _mk in _am_marks:
+        _all_mk = np.vstack(_mk[2])
+        _mk_bw = float(_all_mk[:,0].max() - _all_mk[:,0].min())
+        _mk_bh = float(_all_mk[:,1].max() - _all_mk[:,1].min())
+        if 40 <= max(_mk_bw, _mk_bh) <= 2000:
+            _am_marks_valid.append(_mk)
+    _am_marks = _am_marks_valid
+
     # 嵌入尺寸 4000×430 → 9.30:1；PNG 同比例避免變形
     _DPI   = 300
     fig_w  = 4000 / _DPI      # 13.33"
@@ -808,6 +967,9 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
     gs = fig.add_gridspec(1, n, wspace=0.08,  # 增加間距以容納省略號
                            left=0.03, right=0.91, top=0.82, bottom=0.02)
 
+    _in_hgap_drawn = False   # h-gap (A{n_in+3}) 只畫在第一個有 INPUT 對的 section
+    _in_wspan_drawn = False  # W-span (A{n_in+5}) 只畫在第二個有 INPUT 對的 section
+
     for i, (label, x0, x1) in enumerate(regions):
         ax = fig.add_subplot(gs[0, i])
         ax.set_facecolor("white")
@@ -818,26 +980,62 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
         for pts in bump_polys:
             ax.add_patch(plt.Polygon(pts, closed=True, facecolor="white",
                                       edgecolor="black", linewidth=0.2, zorder=2))
-        for apts in amark_polys:
-            acx = float(apts[:,0].mean())
-            if x0 - H*0.5 < acx < x1 + H*0.5:
-                ax.add_patch(plt.Polygon(apts, closed=True, facecolor="none",
-                                         edgecolor="black", linewidth=0.4, zorder=3))
+        # AMARK 多邊形 + D1/D2 標籤（每個 mark 群聚後只標一次）
+        for _ami, (_mk_cx, _mk_cy, _mk_polys) in enumerate(_am_marks):
+            if x0 - H*0.5 < _mk_cx < x1 + H*0.5:
+                for apts in _mk_polys:
+                    ax.add_patch(plt.Polygon(apts, closed=True, facecolor="none",
+                                             edgecolor="black", linewidth=0.4, zorder=3))
+                ax.text(_mk_cx, _mk_cy, f"D{_ami+1}", ha="center", va="center",
+                        fontsize=6, fontweight="bold", color="red", zorder=15)
 
-        # ── pad 著色（無 symbol 標籤）────────────────────────────────────────
+        # ── pad 著色 + Symbol 標籤 (two-pass: draw pads, then stagger labels) ──
+        _mid_y_ks = (ymin + ymax) / 2
+        _sym_reps  = {}  # sym → (leftmost_cx, cy, h, is_bot)
+
+        # Pass 1: draw pads, collect leftmost representative per symbol
         for cat, color_map in [("INPUT",_in_color_ks),("OUTPUT",_out_color_ks),("DUMMY",_dum_color_ks)]:
             for b in (bumps or []):
                 if classify(b) == cat and x0 <= b["cx"] <= x1:
-                    c = color_map.get((round(b["w"]), round(b["h"])))
+                    _bkey = (round(b["w"]), round(b["h"]))
+                    c = color_map.get(_bkey)
                     if c:
                         ax.add_patch(plt.Rectangle(
                             (b["cx"]-b["w"]/2, b["cy"]-b["h"]/2), b["w"], b["h"],
                             facecolor=c, edgecolor="none", zorder=3, alpha=0.85))
+                    if bump_symbols:
+                        _sym = bump_symbols.get((cat, _bkey))
+                        if _sym and (_sym not in _sym_reps or b["cx"] < _sym_reps[_sym][0]):
+                            _is_bot = b["cy"] < _mid_y_ks
+                            _sym_reps[_sym] = (b["cx"], b["cy"], b["h"], _is_bot)
+
+        # Pass 2: collision-based shift (only push right when labels would overlap)
+        if bump_symbols and _sym_reps:
+            _bot_grp = sorted([(s,d) for s,d in _sym_reps.items() if     d[3]], key=lambda x: x[1][0])
+            _top_grp = sorted([(s,d) for s,d in _sym_reps.items() if not d[3]], key=lambda x: x[1][0])
+            _lbl_w = H * 0.12  # estimated label width in um
+            for _grp, _is_bot in [(_bot_grp, True), (_top_grp, False)]:
+                _placed = []  # placed x positions
+                for _sym, (_bcx, _bcy, _bh, _) in _grp:
+                    _base = _bcy + _bh/2 if _is_bot else _bcy - _bh/2
+                    _lty  = _base + H*0.025
+                    _ltx  = _bcx
+                    for _px in _placed:
+                        if abs(_ltx - _px) < _lbl_w:
+                            _ltx = _px + _lbl_w
+                    _placed.append(_ltx)
+                    ax.text(_ltx, _lty, _sym, ha="center",
+                            va="bottom" if _is_bot else "top",
+                            fontsize=5.5, fontweight="bold", color="black",
+                            zorder=16,
+                            bbox=dict(boxstyle="square,pad=0.06", fc="white",
+                                      ec="none", alpha=0.85))
 
         _cjk = {"fontfamily": "Microsoft JhengHei"}
         _sw = x1 - x0
 
         # text_y: 覆寫文字 y 位置（None = 使用箭頭中點）
+        _txt_bbox = dict(boxstyle="square,pad=0.05", fc="white", ec="none", alpha=0.92)
         def _arrow_v(ax_obj, x_ann, y_pad, y_ic, sym, col, text_y=None):
             if abs(y_pad - y_ic) < 0.01: return
             ax_obj.annotate("", xy=(x_ann, y_ic), xytext=(x_ann, y_pad),
@@ -846,7 +1044,8 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
             _ty = text_y if text_y is not None else (y_ic+y_pad)/2
             ax_obj.text(x_ann + _sw*0.04, _ty, sym,
                        ha="left", va="center", fontsize=6.5, color=col,
-                       fontweight="bold", zorder=15, clip_on=False, **_cjk)
+                       fontweight="bold", zorder=15, clip_on=False,
+                       bbox=_txt_bbox, **_cjk)
 
         # text_outside=True：文字放在 x_to 外側（chip edge 外）
         def _arrow_h(ax_obj, x_from, x_to, y_ann, sym, col, text_outside=False):
@@ -859,20 +1058,25 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
                 _ha = "left" if x_to > x_from else "right"
                 ax_obj.text(_tx, y_ann, sym,
                            ha=_ha, va="center", fontsize=6.5, color=col,
-                           fontweight="bold", zorder=15, clip_on=False, **_cjk)
+                           fontweight="bold", zorder=15, clip_on=False,
+                           bbox=_txt_bbox, **_cjk)
             else:
                 ax_obj.text((x_from+x_to)/2, y_ann - pad_y*0.2, sym,
                            ha="center", va="top", fontsize=6.5, color=col,
-                           fontweight="bold", zorder=15, clip_on=False, **_cjk)
+                           fontweight="bold", zorder=15, clip_on=False,
+                           bbox=_txt_bbox, **_cjk)
 
         if chip_bbox_ks:
             cbxmin, cbymin, cbxmax, cbymax = chip_bbox_ks
-            col_a = "#" + _PAL_INPUT[0]
-            col_b = "#" + _PAL_OUTPUT[0]
+            col_a = "#1F3864"   # 深藍，比 INPUT pad fill (#4472C4) 深，確保對比
+            col_b = "#7B0000"   # 深棗紅，比 OUTPUT pad fill (#C00000) 深，確保對比
 
-            # A4：i==0（Left EDGE），INPUT 垂直，pad 下方 → IC 下緣
+            # A4：i==0（Left EDGE），INPUT 垂直，pad 下方 → IC 下緣；x 對齊最左 INPUT bump
             if i == 0 and _a4_bottom_y is not None:
-                _arrow_v(ax, x0 + _sw*0.80, _a4_bottom_y, cbymin, f"A{n_in+1}", col_a)
+                _in_sec0 = [b for b in in_bumps_ks if x0 <= b["cx"] <= x1]
+                _a4_x = min(_in_sec0, key=lambda b: b["cx"])["cx"] if _in_sec0 else \
+                        min(in_bumps_ks, key=lambda b: b["cx"])["cx"]
+                _arrow_v(ax, _a4_x, _a4_bottom_y, cbymin, f"A{n_in+1}", col_a)
 
             # A5：i==0，section 0 xlim 已擴大涵蓋兩端點，IC 左緣 → 第一個 INPUT pad 左緣
             if i == 0 and _a5_left_x is not None and _a5_left_x > cbxmin:
@@ -885,38 +1089,136 @@ def render_key_sections(top, scale, bumps=None, window_um=3500) -> bytes:
                 import sys as _sys_dbg
                 print(f"[A2 INFO] _a2_cx={_a2_cx}, _a2_bot_y={_a2_bot_y}, _a2_top_y={_a2_top_y}, dist={abs(_a2_top_y-_a2_bot_y)}, section={i}/{len(regions)}", file=_sys_dbg.stderr)
 
-                # B5：在 A2 Center 簡圖內，_a2_cx 位置（OUTPUT to INPUT 間距）
-                _b5_sym_num = n_out + 3  # B(n_out+3) = OUTPUT to INPUT 間距
-                _arrow_v(ax, _a2_cx, _a2_bot_y, _a2_top_y, f"B{_b5_sym_num}", col_a2,
+                # A7：OI gap，symbol 與 INFORMATION 表格一致
+                _arrow_v(ax, _a2_cx, _a2_bot_y, _a2_top_y, f"A{n_in+4}", col_a2,
                          text_y=_a2_mid_y)
 
-            # B2：i==2（A2 Center），OUTPUT 垂直，OUTPUT pad 頂部 → IC 上緣
+            # B{2n+1}：i==2（A2 Center），OUTPUT 垂直，OUTPUT pad 頂部 → IC 上緣
             if i == 2 and out_bumps_ks:
                 top_out = max(b["cy"]+b["h"]/2 for b in out_bumps_ks)
-                _arrow_v(ax, x0 + _sw*0.15, top_out, cbymax, f"B{n_out+1}", col_b)
+                _arrow_v(ax, x0 + _sw*0.15, top_out, cbymax, f"B{2*n_out+1}", col_b)
 
-            # B3：i==4（Right EDGE），OUTPUT 水平 → IC 右緣，文字延伸到 chip edge 外
+            # B{2n+2}：i==4（Right EDGE），OUTPUT 水平 → IC 右緣，文字延伸到 chip edge 外
             if i == len(regions)-1 and out_bumps_ks:
                 rgt_b = max(out_bumps_ks, key=lambda b: b["cx"]+b["w"]/2)
                 _b3_y = (_amark_rgt_top + pad_y*0.40) if _amark_rgt_top is not None \
                         else cbymax + pad_y*0.25
                 _arrow_h(ax, rgt_b["cx"]+rgt_b["w"]/2, cbxmax,
-                         _b3_y, f"B{n_out+2}", col_b, text_outside=True)
+                         _b3_y, f"B{2*n_out+2}", col_b, text_outside=True)
 
-            # C3（垂直，like B2）：DUMMY pad 頂部 → IC 上緣，文字放在 pad 上方
+            # C{2n+1}（垂直）：DUMMY pad 頂部 → IC 上緣
             if _c3_info and _c3_sec == i and n_dum > 0:
-                col_c = "#" + _PAL_DUMMY[0]
+                col_c = "#2F2F2F"   # 深灰，比 DUMMY pad fill (#7F7F7F) 深
                 _c3_cx, _c3_pad_top, _c3_ic_top = _c3_info
-                # text_y 放在 pad 頂部上方 ~80μm，清楚標示在 DUMMY pad 旁
                 _arrow_v(ax, _c3_cx + _sw*0.10, _c3_pad_top, _c3_ic_top,
-                         f"C{n_dum+1}", col_c, text_y=_c3_pad_top + 80)
+                         f"C{2*n_dum+1}", col_c, text_y=(_c3_pad_top + _c3_ic_top) / 2)
 
-            # C4（水平，like B3）：DUMMY pad 側緣 → IC 側緣，y 在 bump 中心高度，文字外側
+            # C{2n+2}（水平）：DUMMY pad 側緣 → IC 側緣
             if _c4_info and _c4_sec == i and n_dum > 0:
-                col_c = "#" + _PAL_DUMMY[0]
+                col_c = "#2F2F2F"
                 _c4_pad_x, _c4_ic_x, _c4_bcy = _c4_info
                 _arrow_h(ax, _c4_pad_x, _c4_ic_x, _c4_bcy,
-                         f"C{n_dum+2}", col_c, text_outside=True)
+                         f"C{2*n_dum+2}", col_c, text_outside=True)
+
+            # A6：水平 bump 間距（INPUT 相鄰兩個 bump 之間的 gap）
+            # 在此截面中找兩個相鄰 INPUT bump，畫出右邊緣→下一個左邊緣的箭頭
+            _in_sec = [b for b in in_bumps_ks if x0 <= b["cx"] <= x1]
+            if _in_sec and in_bumps_ks and i != 0:  # skip section 0 to avoid overlap with A4
+                # 計算全局 h_pitch（INPUT）
+                _inp_hp_ks = None
+                if h_pitches_ks_in := {k: v for k, v in
+                                        {(round(b["w"]),round(b["h"])): None
+                                         for b in in_bumps_ks}.items()}:
+                    from collections import Counter as _C6
+                    _wh_cnt = _C6((round(b["w"]),round(b["h"])) for b in in_bumps_ks)
+                    _rep_k  = _wh_cnt.most_common(1)[0][0]
+                    # use pre-computed h_pitches from outer scope via closest match
+                    _in_ks_sorted_cx = sorted(
+                        [b for b in in_bumps_ks if (round(b["w"]),round(b["h"])) == _rep_k],
+                        key=lambda b: b["cx"])
+                    if len(_in_ks_sorted_cx) >= 2:
+                        _dxs = [_in_ks_sorted_cx[j+1]["cx"] - _in_ks_sorted_cx[j]["cx"]
+                                for j in range(min(20, len(_in_ks_sorted_cx)-1))]
+                        _dxs_pos = [d for d in _dxs if 0 < d < 200]
+                        if _dxs_pos:
+                            _inp_hp_ks = sorted(_dxs_pos)[len(_dxs_pos)//2]  # median
+
+                if _inp_hp_ks:
+                    # 找此截面中同一排（相同 cy）相鄰兩個 INPUT bump
+                    _in_sec_s = sorted(_in_sec, key=lambda b: b["cx"])
+                    _a6_pair = None
+                    for _jj in range(len(_in_sec_s)-1):
+                        _b1, _b2 = _in_sec_s[_jj], _in_sec_s[_jj+1]
+                        if abs(_b1["cy"] - _b2["cy"]) < 5:
+                            _gap6 = _b2["cx"] - _b2["w"]/2 - (_b1["cx"] + _b1["w"]/2)
+                            if 0 < _gap6 < _inp_hp_ks:
+                                _a6_pair = (_b1, _b2, _gap6)
+                                break
+                    if _a6_pair:
+                        _b1, _b2, _gap6 = _a6_pair
+                        if not _in_hgap_drawn:
+                            # h-gap：畫在第一個有 INPUT 對的 section
+                            _in_hgap_drawn = True
+                            _a6_y = _b1["cy"] - _b1["h"]/2 - pad_y*0.28
+                            _x_from = _b1["cx"] + _b1["w"]/2
+                            _x_to   = _b2["cx"] - _b2["w"]/2
+                            _arrow_h(ax, _x_from, _x_to, _a6_y, f"A{n_in+3}", col_a)
+                        elif not _in_wspan_drawn:
+                            # W-span：畫在第二個有 INPUT 對的 section（與 h-gap 不同 subplot）
+                            _in_wspan_drawn = True
+                            _aw_y = _b1["cy"] - _b1["h"]/2 - pad_y*0.28
+                            _arrow_h(ax, _b1["cx"]-_b1["w"]/2, _b1["cx"]+_b1["w"]/2,
+                                     _aw_y, f"A{n_in+5}", col_a)
+
+        # B{2n+3}：OUTPUT h-gap（水平，section i==2）— row-based grouping for staggered grids
+        if chip_bbox_ks and n_out > 0 and i == 2:
+            _out_sec_i = [b for b in out_bumps_ks if x0 <= b["cx"] <= x1]
+            if _out_sec_i:
+                from collections import defaultdict as _dd_outrow
+                _out_row_map2 = _dd_outrow(list)
+                for _ob in _out_sec_i:
+                    _out_row_map2[round(_ob["cy"] / 5) * 5].append(_ob)
+                _b7_pair = None
+                _hp_thresh = _out_hp_ks if _out_hp_ks else 200
+                # 從最上排開始找（避免在 OI gap 區域與 A{n_in+4} 文字重疊）
+                for _rcy_k in sorted(_out_row_map2.keys(), reverse=True):
+                    _row_bumps = _out_row_map2[_rcy_k]
+                    if len(_row_bumps) >= 2:
+                        _row_s = sorted(_row_bumps, key=lambda b: b["cx"])
+                        for _jj in range(len(_row_s) - 1):
+                            _ob1, _ob2 = _row_s[_jj], _row_s[_jj+1]
+                            _gb7 = _ob2["cx"] - _ob2["w"]/2 - (_ob1["cx"] + _ob1["w"]/2)
+                            if 0 < _gb7 < _hp_thresh:
+                                _b7_pair = (_ob1, _ob2)
+                                break
+                    if _b7_pair:
+                        break
+                if _b7_pair:
+                    _ob1, _ob2 = _b7_pair
+                    _b7_y = _ob1["cy"] + _ob1["h"]/2 + pad_y*0.12   # 上排 TOP 上方，遠離 OI gap
+                    _arrow_h(ax, _ob1["cx"]+_ob1["w"]/2, _ob2["cx"]-_ob2["w"]/2,
+                             _b7_y, f"B{2*n_out+3}", col_b)
+
+        # B{2n+4}：OUTPUT v-pitch gap（垂直，section i==2）— 最上方相鄰兩排，固定 x 右側
+        if chip_bbox_ks and n_out > 0 and i == 2:
+            _out_v_sec = [b for b in out_bumps_ks if x0 <= b["cx"] <= x1]
+            if _out_v_sec:
+                # 按 cy 降序找最上方相鄰兩排的 gap
+                _out_cy_desc = sorted(_out_v_sec, key=lambda b: -b["cy"])
+                _b6_pair = None
+                for _jj in range(len(_out_cy_desc) - 1):
+                    _vb_hi, _vb_lo = _out_cy_desc[_jj], _out_cy_desc[_jj+1]
+                    _gv = _vb_hi["cy"] - _vb_hi["h"]/2 - (_vb_lo["cy"] + _vb_lo["h"]/2)
+                    if 0 < _gv < 200:
+                        _b6_pair = (_vb_lo, _vb_hi)   # lo=bottom, hi=top
+                        break
+                if _b6_pair:
+                    _vb_lo, _vb_hi = _b6_pair
+                    _b6_x = x0 + _sw * 0.82   # 固定在 section 右側，遠離 B{2n+1} 左側
+                    _arrow_v(ax, _b6_x,
+                             _vb_lo["cy"] + _vb_lo["h"]/2,
+                             _vb_hi["cy"] - _vb_hi["h"]/2,
+                             f"B{2*n_out+4}", col_b)
 
         ax.set_xlim(x0, x1)
         ax.set_ylim(ymin - pad_y, ymax + pad_y * 0.3)
@@ -1074,28 +1376,32 @@ def render_amark_detail(top, scale, ax_um, ay_um, label) -> bytes:
         dim_h(A, B, A, A + MARGIN*0.3, str(_arm_half), fs=7.5)
 
     else:
-        # Triangles: center half-width C=12.5, triangle reaches T=37.5
-        C, T = 12.5, 37.5
+        # Triangles: 依實際 outer 尺寸等比計算（_ow=100 時對應 C=12.5, T=37.5, 邊=37.5, 中=25）
+        _ow   = round(O * 2, 1)
+        C     = round(_ow * 0.125, 3)
+        T     = round(_ow * 0.375, 3)
+        _edge = round(O - C, 2)
+        _mid  = round(2 * C, 2)
 
-        # Outside: full 100×100
-        dim_h(-O, O, O,  O+15, '100')
-        dim_v(-O, O, -O, -O-15, '100')
+        # Outside: 外框尺寸
+        dim_h(-O, O, O,  O+15, str(_ow))
+        dim_v(-O, O, -O, -O-15, str(_ow))
 
-        # Bottom horizontal chain: 37.5 | 25 | 37.5
+        # Bottom horizontal chain: _edge | _mid | _edge
         BOT = -O - 11
-        dim_h(-O, -C, -O, BOT, '37.5', fs=7.5)
-        dim_h(-C,  C, -O, BOT, '25',   fs=7.5)
-        dim_h(C,   O, -O, BOT, '37.5', fs=7.5)
+        dim_h(-O, -C, -O, BOT, str(_edge), fs=7.5)
+        dim_h(-C,  C, -O, BOT, str(_mid),  fs=7.5)
+        dim_h(C,   O, -O, BOT, str(_edge), fs=7.5)
 
-        # Right vertical chain: 37.5 | 25 | 37.5
+        # Right vertical chain: _edge | _mid | _edge
         RGT = O + 11
-        dim_v(-O, -C, O, RGT, '37.5', fs=7.5)
-        dim_v(-C,  C, O, RGT, '25',   fs=7.5)
-        dim_v(C,   O, O, RGT, '37.5', fs=7.5)
+        dim_v(-O, -C, O, RGT, str(_edge), fs=7.5)
+        dim_v(-C,  C, O, RGT, str(_mid),  fs=7.5)
+        dim_v(C,   O, O, RGT, str(_edge), fs=7.5)
 
-        # Triangle leg annotation at top-right: 25
-        dim_h(C, T, C, C+9, '25', fs=7.5)   # horizontal leg
-        dim_v(C, T, C, C+9, '25', fs=7.5)   # vertical leg
+        # Triangle leg annotation at top-right
+        dim_h(C, T, C, C+9, str(_mid), fs=7.5)
+        dim_v(C, T, C, C+9, str(_mid), fs=7.5)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor="white")
@@ -1211,14 +1517,21 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
     TOP_ROWS  = 5    # Top view 圖列數（縮小後僅需 5 行）
 
     if top is not None and scale is not None:
-        png = render_chip_overview(top, scale, chip_w, chip_h, bumps=bumps)
+        _pre_in_s  = sorted(input_types.keys())
+        _pre_out_s = sorted(output_types.keys())
+        _pre_dum_s = sorted(dummy_types.keys())
+        _bsyms = {}
+        for _i, _k in enumerate(_pre_in_s):  _bsyms[("INPUT",  _k)] = f"A{_i+1}"
+        for _i, _k in enumerate(_pre_out_s): _bsyms[("OUTPUT", _k)] = f"B{2*_i+1}"
+        for _i, _k in enumerate(_pre_dum_s): _bsyms[("DUMMY",  _k)] = f"C{2*_i+1}"
+        png = render_chip_overview(top, scale, chip_w, chip_h, bumps=bumps, bump_symbols=_bsyms)
         _embed_image(ws, png, "A1", width_px=2800, height_px=140)
     for ri in range(1, OVW_ROWS + 1):
         ws.row_dimensions[ri].height = 11
 
     # ── 5 重點截面拼接圖（左EDGE + A1/A2/A3 + 右EDGE）──
     if top is not None and scale is not None:
-        key_png = render_key_sections(top, scale, bumps=bumps, window_um=window_um)
+        key_png = render_key_sections(top, scale, bumps=bumps, window_um=window_um, bump_symbols=_bsyms)
         key_r = OVW_ROWS + 1
         for ri in range(key_r, key_r + KEY_ROWS):
             ws.row_dimensions[ri].height = 21
@@ -1269,10 +1582,10 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
 
     r += 1
     for col, label in [
-        (ISEC,  "Symbol"),(ISEC+1, "WxH/水平Pitch"),(ISEC+2,"Number"),(ISEC+3,"Tolerance"),
-        (OSEC,  "Symbol"),(OSEC+1, "WxH/水平Pitch/垂直pitch"),(OSEC+2,"Number"),(OSEC+3,"Tolerance"),
-        (DSEC,  "Symbol"),(DSEC+1, "WxH/水平Pitch"),(DSEC+2,"Number"),(DSEC+3,"Tolerance"),
-        (ASEC,  "Symbol"),(ASEC+1, "WxH"),(ASEC+2,"Tolerance"),
+        (ISEC,  "Symbol"),(ISEC+1, "Size"),(ISEC+2,"Number"),(ISEC+3,"Tolerance"),
+        (OSEC,  "Symbol"),(OSEC+1, "Size"),(OSEC+2,"Number"),(OSEC+3,"Tolerance"),
+        (DSEC,  "Symbol"),(DSEC+1, "Size"),(DSEC+2,"Number"),(DSEC+3,"Tolerance"),
+        (ASEC,  "Symbol"),(ASEC+1, "Size"),(ASEC+2,"Tolerance"),
     ]:
         hdr(ws, r, col, label, bg="2E75B6")
 
@@ -1377,21 +1690,6 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
 
         return v_label, v_dist, h_dist
 
-    def _write_edge_rows(start_row, sec_col, v_label, v_dist, h_dist,
-                         bg="D9E1F2", sym_prefix="A", sym_start=4):
-        rows = [(start_row,   v_label,              v_dist),
-                (start_row+1, "BUMP to IC 側邊edge", h_dist)]
-        for idx, (row, label, dist) in enumerate(rows):
-            if dist is None: continue
-            sym = f"{sym_prefix}{sym_start + idx}"
-            # ✓ 統一使用 dat() 函數確保所有字型一致
-            dat(ws, row, sec_col,     sym,              bg=bg, bold=True)
-            dat(ws, row, sec_col+1,   label,           bg=bg, align="left", bold=True)
-            dat(ws, row, sec_col+2,   f"{dist}um",     bg=bg)
-            dat(ws, row, sec_col+3,   "±2",            bg=bg)
-
-    max_rows = max(len(input_types), len(output_types), len(dummy_types), 1)
-
     # ── Per-type background colours（與圖面 palette 一致）────────────────────
     _in_sorted  = sorted(input_types.keys())
     _out_sorted = sorted(output_types.keys())
@@ -1399,93 +1697,166 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
     _in_bg  = {k: _lighten(_PAL_INPUT [i%len(_PAL_INPUT )], 0.30) for i,k in enumerate(_in_sorted)}
     _out_bg = {k: _lighten(_PAL_OUTPUT[i%len(_PAL_OUTPUT)], 0.30) for i,k in enumerate(_out_sorted)}
     _dum_bg = {k: _lighten(_PAL_DUMMY [i%len(_PAL_DUMMY )], 0.30) for i,k in enumerate(_dum_sorted)}
-    # BUMP to IC 相关字段背景色使用白色
     _in_edge_bg  = "FFFFFF"
     _out_edge_bg = "FFFFFF"
     _dum_edge_bg = "FFFFFF"
 
-    # ── INPUT ────────────────────────────────────────────────────────────────
-    for i, (key, info) in enumerate(sorted(input_types.items())):
-        bg = _in_bg.get(key, "EBF3FB")
-        dat(ws, r+i, ISEC,   f"A{i+1}",                  bg=bg, bold=True)
-        dat(ws, r+i, ISEC+1, _size_str(key),              bg=bg)
-        dat(ws, r+i, ISEC+2, _no_range_str(info["nos"]),  bg=bg)
-        dat(ws, r+i, ISEC+3, "±2",                        bg=bg)
-    _write_edge_rows(r + len(input_types), ISEC, *_edge_dists(in_bumps_list), bg=_in_edge_bg,
-                     sym_prefix="A", sym_start=len(input_types)+1)
-
-    # ── OUTPUT ────────────────────────────────────────────────────────────────
-    for i, (key, info) in enumerate(sorted(output_types.items())):
-        bg = _out_bg.get(key, "E2EFDA")
-        dat(ws, r+i, OSEC,   f"B{i+1}",                  bg=bg, bold=True)
-        dat(ws, r+i, OSEC+1, _size_str(key),              bg=bg)
-        dat(ws, r+i, OSEC+2, _no_range_str(info["nos"]),  bg=bg)
-        dat(ws, r+i, OSEC+3, "±2",                        bg=bg)
-    _write_edge_rows(r + len(output_types), OSEC, *_edge_dists(out_bumps_list), bg=_out_edge_bg,
-                     sym_prefix="B", sym_start=len(output_types)+1)
-
-    # B(n_out+3)：OUTPUT to INPUT 間距（靠近 chip 中心的 OUTPUT bumps 下緣 - INPUT 上緣）
+    # ── 預先計算 OUTPUT-to-INPUT 間距 ─────────────────────────────────────────
+    _oi_gap = None
     if in_bumps_list and out_bumps_list:
-        # 只用 OUTPUT 和 INPUT bumps，忽略 DUMMY
-        _in_cy_values = [b["cy"] for b in in_bumps_list]
-        _out_cy_values = [b["cy"] for b in out_bumps_list]
-        _in_h_values = [b["h"] for b in in_bumps_list]
-        _out_h_values = [b["h"] for b in out_bumps_list]
-
-        # INPUT 最高點（用實際高度）
         _in_top_y = max(b["cy"] + b["h"]/2 for b in in_bumps_list)
-
-        # Chip 中心點 X 座標
         _chip_center_x = (chip_bbox[0] + chip_bbox[2]) / 2 if chip_bbox else 0
-
-        # OUTPUT 最低點：只用 X 方向靠近 chip 中心的 OUTPUT bumps
         _chip_width = chip_bbox[2] - chip_bbox[0] if chip_bbox else 1000
-        _center_tolerance = _chip_width / 4  # chip 寬度的 1/4 範圍
-        _near_out_bumps = [b for b in out_bumps_list if abs(b["cx"] - _chip_center_x) <= _center_tolerance]
+        _near_out = [b for b in out_bumps_list
+                     if abs(b["cx"] - _chip_center_x) <= _chip_width / 4]
+        _out_bot_y = min(b["cy"] - b["h"]/2 for b in (_near_out or out_bumps_list))
+        _oi_gap = round(abs(_in_top_y - _out_bot_y), 3)
 
-        if _near_out_bumps:
-            _out_bot_y = min(b["cy"] - b["h"]/2 for b in _near_out_bumps)
-        else:
-            # fallback: 用所有 OUTPUT bumps
-            _out_bot_y = min(b["cy"] - b["h"]/2 for b in out_bumps_list)
+    # ── V1.1 INPUT section ────────────────────────────────────────────────────
+    # Group by H (all INPUT share same W); show each H as one row,
+    # then edge/gap/W rows (A_{n+1}..A_{n+5})
+    inp_by_h = {}
+    for b in in_bumps_list:
+        inp_by_h.setdefault(round(b["h"]), []).append(b)
 
-        # 計算絕對距離（無論坐標順序）
-        _b4_dist = round(abs(_in_top_y - _out_bot_y), 3)
-        import sys as _sys
-        _near_count = len(_near_out_bumps) if _near_out_bumps else len(out_bumps_list)
-        if _b4_dist > 0:  # 只要間距不為 0
-            # OUTPUT edge rows 之後的下一行（INPUT、OUTPUT、DUMMY 並排在同一行 r）
-            _b4_row = r + len(output_types) + 2  # len(output_types) 為 OUTPUT rows，+2 為 edge rows
-            _b4_sym = f"B{len(output_types)+3}"  # 動態編號：B1..B(n)為 OUTPUT size，B(n+1/2)為邊界，B(n+3)為 OUTPUT→INPUT
-            print(f"[B4 WRITE] row={_b4_row}, sym={_b4_sym}, dist={_b4_dist}", file=_sys.stderr)
-            dat(ws, _b4_row, OSEC,   _b4_sym,                    bg=_out_edge_bg, bold=True)
-            dat(ws, _b4_row, OSEC+1, "OUTPUT to INPUT間距",      bg=_out_edge_bg, bold=True, align="left")
-            dat(ws, _b4_row, OSEC+2, _b4_dist,                   bg=_out_edge_bg)
-            dat(ws, _b4_row, OSEC+3, "",                         bg=_out_edge_bg)
+    from collections import Counter as _Counter
+    _inp_w_counts = _Counter(round(b["w"]) for b in in_bumps_list)
+    inp_w_main = _inp_w_counts.most_common(1)[0][0] if _inp_w_counts else None
+    _inp_w_all = sorted(_inp_w_counts)  # all unique W values (ascending)
+    _inp_rep_key = (inp_w_main, min(inp_by_h)) if (inp_w_main and inp_by_h) else None
+    _inp_h_pitch = h_pitches_in.get(_inp_rep_key)
+    inp_h_gap = round(float(_inp_h_pitch) - float(inp_w_main), 3) if (_inp_h_pitch and inp_w_main) else None
 
-    # ── DUMMY ─────────────────────────────────────────────────────────────────
-    for i, (key, info) in enumerate(sorted(dummy_types.items())):
-        bg = _dum_bg.get(key, "FFF2CC")
-        dat(ws, r+i, DSEC,   f"C{i+1}",                  bg=bg, bold=True)
-        dat(ws, r+i, DSEC+1, _size_str(key),              bg=bg)
-        dat(ws, r+i, DSEC+2, _no_range_str(info["nos"]),  bg=bg)
-        dat(ws, r+i, DSEC+3, "±2",                        bg=bg)
-    _write_edge_rows(r + len(dummy_types), DSEC, *_edge_dists(dum_bumps_list), bg=_dum_edge_bg,
-                     sym_prefix="C", sym_start=len(dummy_types)+1)
+    all_inp_range = _no_range_str([b["number"] for b in in_bumps_list])
 
-    # ── AMARK：每個 AMARK_LAYER 矩形的 W 尺寸 ──────────────────────────────
+    def _num_desc(base_num, desc):
+        return f"{base_num} ({desc})" if base_num else f"({desc})"
+
+    in_sym = 0
+    for h_val in sorted(inp_by_h):
+        # pick the bg color using the most common W for this H group
+        _dominant_w = _Counter(round(b["w"]) for b in inp_by_h[h_val]).most_common(1)[0][0]
+        bg = _in_bg.get((_dominant_w, h_val), "EBF3FB")
+        nos = [b["number"] for b in inp_by_h[h_val]]
+        in_sym += 1
+        dat(ws, r + in_sym - 1, ISEC,   f"A{in_sym}",                             bg=bg, bold=True)
+        dat(ws, r + in_sym - 1, ISEC+1, h_val,                                    bg=bg)
+        dat(ws, r + in_sym - 1, ISEC+2, _num_desc(_no_range_str(nos), f"H={h_val}"), bg=bg)
+        dat(ws, r + in_sym - 1, ISEC+3, "±2",                                     bg=bg)
+
+    v_label_in, v_dist_in, h_dist_in = _edge_dists(in_bumps_list)
+    _inp_hp_str = str(int(_inp_h_pitch)) if _inp_h_pitch and _inp_h_pitch == int(_inp_h_pitch) else str(_inp_h_pitch)
+    for val, base_num, tol, desc in [
+        (v_dist_in, all_inp_range, "±2", f"BUMP to IC {v_label_in.split('IC ')[-1]}" if v_label_in else "BUMP to IC edge"),
+        (h_dist_in, "",           "±2", "BUMP to IC 側邊"),
+        (inp_h_gap, "",           "±2", f"H-pitch gap = {_inp_hp_str}-{inp_w_main}" if (_inp_h_pitch and inp_w_main) else "H-pitch gap"),
+        (_oi_gap,   "",           "",   "OUTPUT to INPUT gap"),
+    ]:
+        if val is None: continue
+        in_sym += 1
+        dat(ws, r + in_sym - 1, ISEC,   f"A{in_sym}",            bg=_in_edge_bg, bold=True)
+        dat(ws, r + in_sym - 1, ISEC+1, val,                      bg=_in_edge_bg)
+        dat(ws, r + in_sym - 1, ISEC+2, _num_desc(base_num, desc), bg=_in_edge_bg)
+        dat(ws, r + in_sym - 1, ISEC+3, tol,                      bg=_in_edge_bg)
+    # W 行：每個唯一 W 值各一行
+    for w_val in _inp_w_all:
+        in_sym += 1
+        dat(ws, r + in_sym - 1, ISEC,   f"A{in_sym}",              bg=_in_edge_bg, bold=True)
+        dat(ws, r + in_sym - 1, ISEC+1, w_val,                     bg=_in_edge_bg)
+        dat(ws, r + in_sym - 1, ISEC+2, _num_desc("", "Bump W"),   bg=_in_edge_bg)
+        dat(ws, r + in_sym - 1, ISEC+3, "±2",                      bg=_in_edge_bg)
+
+    # ── V1.1 OUTPUT section ───────────────────────────────────────────────────
+    # Each (W,H) type gets 2 rows: W row then H row; then edge/gap rows
+    out_sym = 0
+    for (out_w, out_h) in sorted(output_types):
+        bg = _out_bg.get((out_w, out_h), "E2EFDA")
+        nos = output_types[(out_w, out_h)]["nos"]
+        out_sym += 1
+        dat(ws, r + out_sym - 1, OSEC,   f"B{out_sym}",                                    bg=bg, bold=True)
+        dat(ws, r + out_sym - 1, OSEC+1, out_w,                                            bg=bg)
+        dat(ws, r + out_sym - 1, OSEC+2, _num_desc(_no_range_str(nos), "Bump W"),          bg=bg)
+        dat(ws, r + out_sym - 1, OSEC+3, "±2",                                             bg=bg)
+        out_sym += 1
+        dat(ws, r + out_sym - 1, OSEC,   f"B{out_sym}",                                   bg=bg, bold=True)
+        dat(ws, r + out_sym - 1, OSEC+1, out_h,                                           bg=bg)
+        dat(ws, r + out_sym - 1, OSEC+2, _num_desc("", f"H={out_h}"),                     bg=bg)
+        dat(ws, r + out_sym - 1, OSEC+3, "±2",                                            bg=bg)
+
+    v_label_out, v_dist_out, h_dist_out = _edge_dists(out_bumps_list)
+    _out_rep = sorted(output_types)[0] if output_types else None
+    _out_hp = h_pitches_out.get(_out_rep) if _out_rep else None
+    _out_vp = v_pitches_out.get(_out_rep) if _out_rep else None
+    _out_h_gap = round(float(_out_hp) - float(_out_rep[0]), 3) if (_out_hp and _out_rep) else None
+    _out_v_gap = round(float(_out_vp) - float(_out_rep[1]), 3) if (_out_vp and _out_rep) else None
+    _out_hp_str = str(int(_out_hp)) if _out_hp and _out_hp == int(_out_hp) else str(_out_hp)
+    _out_vp_str = str(int(_out_vp)) if _out_vp and _out_vp == int(_out_vp) else str(_out_vp)
+    _v_edge_lbl = f"BUMP to IC {v_label_out.split('IC ')[-1]}" if v_label_out else "BUMP to IC edge"
+    for val, tol, desc in [
+        (v_dist_out, "±2", _v_edge_lbl),
+        (h_dist_out, "±2", "BUMP to IC 側邊"),
+        (_out_h_gap, "±2", f"H-pitch gap = {_out_hp_str}-{_out_rep[0]}" if (_out_hp and _out_rep) else "H-pitch gap"),
+        (_out_v_gap, "±2", f"V-pitch gap = {_out_vp_str}-{_out_rep[1]}" if (_out_vp and _out_rep) else "V-pitch gap"),
+    ]:
+        if val is None: continue
+        out_sym += 1
+        dat(ws, r + out_sym - 1, OSEC,   f"B{out_sym}",             bg=_out_edge_bg, bold=True)
+        dat(ws, r + out_sym - 1, OSEC+1, val,                        bg=_out_edge_bg)
+        dat(ws, r + out_sym - 1, OSEC+2, _num_desc("", desc),        bg=_out_edge_bg)
+        dat(ws, r + out_sym - 1, OSEC+3, tol,                        bg=_out_edge_bg)
+
+    # ── V1.1 DUMMY section ────────────────────────────────────────────────────
+    dum_sym = 0
+    for (dum_w, dum_h) in sorted(dummy_types):
+        bg = _dum_bg.get((dum_w, dum_h), "FFF2CC")
+        nos = dummy_types[(dum_w, dum_h)]["nos"]
+        dum_sym += 1
+        dat(ws, r + dum_sym - 1, DSEC,   f"C{dum_sym}",                                        bg=bg, bold=True)
+        dat(ws, r + dum_sym - 1, DSEC+1, dum_w,                                                bg=bg)
+        dat(ws, r + dum_sym - 1, DSEC+2, _num_desc(_no_range_str(nos), f"{dum_w}×{dum_h} Bump W"), bg=bg)
+        dat(ws, r + dum_sym - 1, DSEC+3, "±2",                                                 bg=bg)
+        dum_sym += 1
+        dat(ws, r + dum_sym - 1, DSEC,   f"C{dum_sym}",                                       bg=bg, bold=True)
+        dat(ws, r + dum_sym - 1, DSEC+1, dum_h,                                               bg=bg)
+        dat(ws, r + dum_sym - 1, DSEC+2, _num_desc("", f"{dum_w}×{dum_h} Bump H"),            bg=bg)
+        dat(ws, r + dum_sym - 1, DSEC+3, "±2",                                                bg=bg)
+
+    v_label_dum, v_dist_dum, h_dist_dum = _edge_dists(dum_bumps_list)
+    _dv_lbl = f"BUMP to IC {v_label_dum.split('IC ')[-1]}" if v_label_dum else "BUMP to IC edge"
+    for val, tol, desc in [
+        (v_dist_dum, "±2", _dv_lbl),
+        (h_dist_dum, "±2", "BUMP to IC 側邊"),
+    ]:
+        if val is None: continue
+        dum_sym += 1
+        dat(ws, r + dum_sym - 1, DSEC,   f"C{dum_sym}",        bg=_dum_edge_bg, bold=True)
+        dat(ws, r + dum_sym - 1, DSEC+1, val,                   bg=_dum_edge_bg)
+        dat(ws, r + dum_sym - 1, DSEC+2, _num_desc("", desc),   bg=_dum_edge_bg)
+        dat(ws, r + dum_sym - 1, DSEC+3, tol,                   bg=_dum_edge_bg)
+
+    # ── AMARK：gap-based cluster bbox（每個實體 mark 的外框尺寸）───────────
     amark_sizes = []
     if top is not None and scale is not None:
-        seen_cx = set()
+        _am_info = []
         for poly in top.polygons:
-            if (poly.layer, poly.datatype) == AMARK_LAYER and len(poly.points) == 4:
+            if (poly.layer, poly.datatype) == AMARK_LAYER and len(poly.points) >= 3:
                 pts = np.array(poly.points) * scale
-                cx_p = round(float(pts[:,0].mean()), 1)
-                if cx_p not in seen_cx:
-                    seen_cx.add(cx_p)
-                    aw = round(float(pts[:,0].max() - pts[:,0].min()), 2)
-                    ah = round(float(pts[:,1].max() - pts[:,1].min()), 2)
-                    amark_sizes.append((aw, ah))
+                _am_info.append((float(pts[:,0].mean()), pts))
+        _am_info.sort(key=lambda x: x[0])
+        _am_clusts = []
+        _AM_G = 500.0
+        for _acx, _apts in _am_info:
+            if _am_clusts and _acx - float(_am_clusts[-1][-1][0]) < _AM_G:
+                _am_clusts[-1].append((_acx, _apts))
+            else:
+                _am_clusts.append([(_acx, _apts)])
+        for _clust in _am_clusts:
+            _all = np.vstack([p for _, p in _clust])
+            aw = round(float(_all[:,0].max() - _all[:,0].min()), 2)
+            ah = round(float(_all[:,1].max() - _all[:,1].min()), 2)
+            if not (40 <= max(aw, ah) <= 2000):  # 排除雜散小 poly 和 chip outline 等超大 poly
+                continue
+            amark_sizes.append((aw, ah))
     if not amark_sizes:
         amark_sizes = [(100.0, 100.0)] * len(amarks)
 
@@ -1495,6 +1866,7 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
         dat(ws, r+i, ASEC+2, "±2")
 
     # ── AMARK 座標表（A1 A2 橫向並排）────────────────────────────────────────
+    max_rows = max(in_sym, out_sym, dum_sym, len(amark_sizes), 1)
     r2 = r + max_rows + 3
     hdr(ws, r2, 1, "AMARK Position", bg="833C11")
     r2 += 1
@@ -1505,7 +1877,7 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
     r2 += 1
     for i, (ax_pos, ay_pos) in enumerate(amarks, 1):
         base = (i - 1) * 3 + 1
-        dat(ws, r2, base,     f"A{i}", bold=True)
+        dat(ws, r2, base,     f"D{i}", bold=True)
         dat(ws, r2, base + 1, ax_pos, fmt="0.000")
         dat(ws, r2, base + 2, ay_pos, fmt="0.000")
     r2 += 1
@@ -1516,7 +1888,7 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
         ws.row_dimensions[ri].height = 14
     if top is not None and scale is not None:
         for i, (ax_um, ay_um) in enumerate(amarks):
-            png = render_amark_detail(top, scale, ax_um, ay_um, f"A{i+1}")
+            png = render_amark_detail(top, scale, ax_um, ay_um, f"D{i+1}")
             _embed_image(ws, png, f"{get_column_letter(i * 3 + 1)}{img_start_row}",
                          width_px=440, height_px=440)
 
@@ -1525,9 +1897,9 @@ def write_information(ws, bumps, chip_w, chip_h, amarks, top=None, scale=None, w
     # E=Symbol, F=WxH/Pitch/Vpitch, G=Number, H=Tol  (OUTPUT)
     # I=Symbol, J=WxH/Pitch, K=Number, L=Tol  (DUMMY)
     # M=Symbol, N=WxH, O=Tol  (AMARK)
-    for col, w in [("A",28),("B",26),("C",24),("D",10),
-                   ("E",28),("F",28),("G",24),("H",10),
-                   ("I",28),("J",26),("K",24),("L",10),
+    for col, w in [("A",28),("B",26),("C",40),("D",10),
+                   ("E",28),("F",28),("G",40),("H",10),
+                   ("I",28),("J",26),("K",40),("L",10),
                    ("M",13),("N",16),("O",10),
                    ("P",16),("Q",16),("R",16),("S",16)]:
         ws.column_dimensions[col].width = w
@@ -1587,16 +1959,43 @@ def main():
     print(f"Saved: {OUT_PATH}")
 
 def run(gds_path: str, out_path: str, mapping_json: str = None,
-        original_stem: str = None, overrides: dict = None, window_um: int = 3500) -> str:
+        original_stem: str = None, overrides: dict = None, window_um=None) -> str:
     """
     從外部呼叫的入口（供 gds_server.py 使用）。
     支援動態 layer mapping JSON 與空間分類（OUTPUT=密集行）。
     original_stem：原始 GDS 檔名（不含副檔名），用作 sheet1 名稱。
-    window_um：簡圖各區域寬度（µm），預設 3500，A2 Center 固定 ±1750。
+    window_um：簡圖各區域寬度（µm）。None = 依 bump pitch 自動計算，A2 Center 固定 ±1750。
     回傳輸出路徑。
     """
     import json as _json
     global BUMP_LAYERS, AMARK_LAYER, TEXT_NUM_LAYERS, TEXT_NAME_LAYER, CHIP_LAYER, classify
+
+    # ── 自動偵測 mapping JSON 與 bump type overrides ──────────────────────────
+    _gds_stem = Path(gds_path).stem
+    _pname_auto = _gds_stem.split("_")[0] if "_" in _gds_stem else _gds_stem
+    _out_parent = Path(out_path).parent if Path(out_path).suffix else Path(out_path)
+    _auto_json_candidates = [
+        _out_parent / f"{_pname_auto}.layer_mapping.json",
+        Path(gds_path).parent / f"{_pname_auto}.layer_mapping.json",
+        Path("output") / f"{_pname_auto}.layer_mapping.json",
+    ]
+    _auto_json_path = next((p for p in _auto_json_candidates if p.exists()), None)
+    if _auto_json_path:
+        import sys as _sys_auto
+        if mapping_json is None:
+            mapping_json = str(_auto_json_path)
+            print(f"[AUTO JSON] 自動載入 {_auto_json_path.name}", file=_sys_auto.stderr)
+        if overrides is None:
+            try:
+                _jdata = _json.loads(_auto_json_path.read_text(encoding="utf-8"))
+                _bts = _jdata.get("bump_type_stats", [])
+                if _bts:
+                    overrides = {f"{int(b['w'])},{int(b['h'])}": b.get("cat", b.get("type", ""))
+                                 for b in _bts if b.get("cat") or b.get("type")}
+                    if overrides:
+                        print(f"[AUTO OVERRIDES] {overrides}", file=_sys_auto.stderr)
+            except Exception as _ex:
+                print(f"[WARN] Auto override load: {_ex}", file=_sys_auto.stderr)
 
     # ── 從 mapping JSON 更新 layer 常數 ──────────────────────────────────────
     if mapping_json and Path(mapping_json).exists():
@@ -1727,6 +2126,11 @@ def run(gds_path: str, out_path: str, mapping_json: str = None,
         return b.get("_cat", "DUMMY")
     # 替代全局 classify，使 render_key_sections 能看到 overrides
     classify = _classify_bumps
+
+    # ── 自動計算 window_um（若未指定）────────────────────────────────────────
+    if window_um is None:
+        window_um = compute_auto_window_um(bumps, chip_w or 30000)
+        print(f"[AUTO WINDOW] window_um={window_um}")
 
     # ── 產生 Excel ───────────────────────────────────────────────────────────
     stem = original_stem if original_stem else Path(gds_path).stem
