@@ -16,6 +16,23 @@ _HERE = Path(__file__).parent.resolve()
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+# ── 雲端 / 容器模式偵測 ───────────────────────────────────────────────────────
+# 任一 env var 存在 → 雲端模式：忽略 client 傳來的 out_dir，固定使用 container 內 output/，
+# 並透過 Content-Disposition: attachment 強制下載 (JSON/XLSX/CSV)。
+# 本地 dev（無 env var）→ 維持原行為，client 可指定本機 out_dir。
+_IS_CLOUD = bool(
+    os.environ.get("KUBERNETES_SERVICE_HOST")   # K8S pod 一定有
+    or os.environ.get("RENDER")                  # Render.com
+    or os.environ.get("GDS_CLOUD_MODE")          # 手動強制
+)
+
+def _resolve_out_dir(client_out_dir: str) -> str:
+    """雲端模式忽略 client 路徑（無法寫到使用者本機，且 Linux container 無 Windows 路徑）。
+    本地模式維持原行為。"""
+    if _IS_CLOUD:
+        return str(_HERE / "output")
+    return client_out_dir.strip() if client_out_dir else str(_HERE / "output")
+
 # ── 分析邏輯（不依賴 tkinter）────────────────────────────────────────────────
 PURPOSES = ["bump", "amark", "amark_text", "bump_text_name", "bump_text_number", "chip_size", "origin_mark", "unknown"]
 PURPOSE_LABELS = {
@@ -220,7 +237,10 @@ def index():
 @app.route("/output/<path:filename>")
 def serve_output(filename):
     out_dir = str(_HERE / "output")
-    return send_from_directory(out_dir, filename)
+    # JSON / XLSX / CSV 強制下載（Content-Disposition: attachment）以避免瀏覽器預覽（如 Chrome JSON viewer）
+    # PNG / HTML / PDF 保持 inline，使用者可在新分頁開啟預覽
+    _force_dl = filename.lower().endswith(('.json', '.xlsx', '.csv'))
+    return send_from_directory(out_dir, filename, as_attachment=_force_dl)
 
 
 # ── 診斷：列出輸出目錄中的所有檔案 ─────────────────────────────────────────────
@@ -252,15 +272,15 @@ def list_output_files():
 def open_folder():
     """打開輸出資料夾讓用戶手動選擇檔案"""
     body = request.json or {}
+    # 雲端模式不可能開 server 端資料夾，立刻回友善訊息（早於 path 檢查）
+    if _IS_CLOUD:
+        return jsonify({"message": "雲端模式：請直接從瀏覽器下載資料夾取得檔案，無法開啟 server 端目錄"})
     out_dir = body.get("out_dir", "").strip() or str(_HERE / "output")
 
     try:
         out_path = Path(out_dir)
         if not out_path.exists():
             return jsonify({"error": "資料夾不存在"}), 400
-
-        if os.environ.get("RENDER"):
-            return jsonify({"message": "雲端模式：請直接下載檔案，無法開啟本機資料夾"})
 
         import subprocess
         import platform
@@ -462,7 +482,7 @@ def api_load_mapping():
 def api_save_mapping():
     body = request.json or {}
     gds_path = body.get("file_path", "").strip()
-    out_dir  = body.get("out_dir", "").strip()
+    out_dir  = _resolve_out_dir(body.get("out_dir", ""))
     rows     = body.get("rows", [])
     bump_type_stats = body.get("bump_type_stats", [])
 
@@ -470,8 +490,6 @@ def api_save_mapping():
         return jsonify({"error": "無 layer 資料"}), 400
 
     try:
-        if not out_dir:
-            out_dir = str(_HERE / "output")
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
         stem     = _uploaded_gds_name if _uploaded_gds_name else (Path(gds_path).stem if gds_path else "design")
@@ -502,14 +520,12 @@ def api_save_mapping():
 def api_run_image():
     body     = request.json or {}
     gds_path = body.get("file_path", "").strip()
-    out_dir  = body.get("out_dir", "").strip()
+    out_dir  = _resolve_out_dir(body.get("out_dir", ""))
 
     if not gds_path or not Path(gds_path).exists():
         return jsonify({"error": "GDS 路徑無效"}), 400
 
     try:
-        if not out_dir:
-            out_dir = str(_HERE / "output")
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         # 原始檔名：優先用上傳時記錄的，否則用暫存路徑的 stem
         title = _uploaded_gds_name if _uploaded_gds_name else Path(gds_path).stem
@@ -644,15 +660,13 @@ def api_run_elements():
     """Bump/Amark 分析：使用與 PAD Excel 相同的分析邏輯（test_export_xlsx）"""
     body     = request.json or {}
     gds_path = body.get("file_path", "").strip()
-    out_dir  = body.get("out_dir", "").strip()
+    out_dir  = _resolve_out_dir(body.get("out_dir", ""))
 
     if not gds_path or not Path(gds_path).exists():
         return jsonify({"error": "GDS 路徑無效"}), 400
 
     try:
         import importlib, sys as _sys, numpy as _np
-        if not out_dir:
-            out_dir = str(_HERE / "output")
         stem  = _uploaded_gds_name if _uploaded_gds_name else Path(gds_path).stem
         pname = _project_name(stem)
         mj    = str(Path(out_dir) / f"{pname}.layer_mapping.json")
@@ -1170,7 +1184,7 @@ def _build_xlsx_UNUSED(gds_path: str, out_dir: str, original_stem: str = None, m
 def api_run_xlsx():
     body      = request.json or {}
     gds_path  = body.get("file_path", _uploaded_gds_path).strip()
-    out_dir   = body.get("out_dir", "").strip() or str(_HERE / "output")
+    out_dir   = _resolve_out_dir(body.get("out_dir", ""))
     overrides = body.get("overrides", {})   # {"w,h": "INPUT/OUTPUT/DUMMY"}
     window_um = body.get("window_um", 3500)  # 簡圖區域寬度，預設 3500
     if not gds_path or not Path(gds_path).exists():
@@ -1224,7 +1238,7 @@ def api_run_bump_check():
     """執行完整 Bump Rule 檢查（Perl 優先，無 Perl 時自動用 Python）"""
     body = request.json or {}
     gds_path = body.get("file_path", _uploaded_gds_path).strip()
-    out_dir = body.get("out_dir", "").strip() or str(_HERE / "output")
+    out_dir = _resolve_out_dir(body.get("out_dir", ""))
 
     if not gds_path or not Path(gds_path).exists():
         return jsonify({"error": "GDS 路徑無效"}), 400
